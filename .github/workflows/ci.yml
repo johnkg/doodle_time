@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # Platform folders are not committed; generate them (existing files are kept).
+      - name: Generate platform folders
+        run: flutter create . --platforms=web --project-name doodle_time
+
+      - run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        run: flutter test
+
+      - name: Build web
+        # Bundle CanvasKit instead of loading it from Google's CDN (no network calls).
+        run: flutter build web --release --no-web-resources-cdn
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: build/web

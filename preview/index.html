@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Doodle Time preview</title>
+<style>
+  :root { --purple:#673ab7; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; background:#fff3d6; touch-action: none; }
+  #app { display:flex; flex-direction:column; height:100%; }
+  #top { display:flex; gap:8px; padding:8px 12px 2px; }
+  .act { flex:1; height:56px; border:2px solid #0002; border-radius:20px; background:#fff; font-size:15px; font-weight:700; cursor:pointer; }
+  .act:disabled { opacity:.4; }
+  #wrap { flex:1; margin:6px 12px; border:3px solid #0001; border-radius:24px; background:#fff; overflow:hidden; min-height:0; }
+  canvas { width:100%; height:100%; display:block; touch-action:none; }
+  #panel { background:#fff; border-radius:28px 28px 0 0; padding:10px 12px; }
+  .row { display:flex; gap:8px; overflow-x:auto; align-items:center; padding:2px 0; }
+  .row + .row { margin-top:8px; }
+  .tool { flex:none; width:72px; height:72px; border:2px solid #0002; border-radius:18px; background:#fff; font-size:28px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .tool small { font-size:13px; font-weight:700; }
+  .tool.sel, .stamp.sel { border:4px solid var(--purple); background:#ede7f6; }
+  .size { flex:none; width:56px; height:56px; border-radius:50%; border:4px solid transparent; background:none; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .size.sel { border-color: var(--purple); }
+  .size i { display:block; background:#424242; border-radius:50%; }
+  .color { flex:none; width:52px; height:52px; border-radius:50%; border:2px solid #0002; cursor:pointer; }
+  .color.sel { border:5px solid #000; }
+  .rainbow { background: conic-gradient(red, orange, yellow, green, blue, purple, red); }
+  .stamp { flex:none; width:56px; height:56px; border:2px solid #0002; border-radius:16px; background:#fff; font-size:30px; cursor:pointer; }
+  dialog { border:none; border-radius:24px; padding:20px; font-size:20px; }
+  dialog .choices { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+  dialog button { font-size:22px; min-width:90px; height:52px; border-radius:16px; border:2px solid #0002; background:#ede7f6; cursor:pointer; }
+  .note { position:fixed; right:10px; bottom:6px; font-size:11px; color:#0007; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top"></div>
+  <div id="wrap"><canvas id="cv"></canvas></div>
+  <div id="panel"><div class="row" id="tools"></div><div class="row" id="opts"></div></div>
+</div>
+<dialog id="dlg"></dialog>
+<div class="note">HTML preview of the Flutter UI - feel only, not the real app</div>
+<script>
+const PALETTE = ['#E53935','#FB8C00','#FDD835','#43A047','#00ACC1','#1E88E5','#8E24AA','#F06292','#6D4C41','#212121'];
+const STAMPS = ['⭐','❤️','🌈','🐶','🐱','🦋','🌸','🚀','🍎','☀️'];
+const SIZES = [8,16,30];
+
+// Pages in 100x100 space (same idea as lib/pages.dart; a few shapes only).
+const R=(l,t,r,b)=>{const p=new Path2D();p.rect(l,t,r-l,b-t);return p};
+const C=(x,y,r)=>{const p=new Path2D();p.arc(x,y,r,0,Math.PI*2);return p};
+const O=(l,t,r,b)=>{const p=new Path2D();p.ellipse((l+r)/2,(t+b)/2,(r-l)/2,(b-t)/2,0,0,Math.PI*2);return p};
+const P=(...pts)=>{const p=new Path2D();p.moveTo(...pts[0]);pts.slice(1).forEach(q=>p.lineTo(...q));p.closePath();return p};
+const PAGES = {
+  House:{emoji:'🏠',regions:[R(0,0,100,100),R(0,75,100,100),R(25,45,75,75),P([20,45],[50,22],[80,45]),R(44,56,56,75),R(30,52,40,62),R(60,52,70,62),C(84,16,9),R(85,60,89,76),C(87,52,12)]},
+  Fish:{emoji:'🐟',regions:[R(0,0,100,100),R(0,88,100,100),P([24,50],[6,34],[6,66]),P([42,35],[52,20],[62,34]),O(20,32,78,68),O(44,34,54,66),C(68,46,4),C(88,30,5),C(92,18,3.5),C(84,12,3)]},
+  Butterfly:{emoji:'🦋',regions:[R(0,0,100,100),O(12,14,48,50),O(52,14,88,50),O(20,48,48,82),O(52,48,80,82),C(30,32,6),C(70,32,6),C(34,65,5),C(66,65,5),O(46,26,54,80),C(50,22,5)]},
+};
+
+const st = { tool:'brush', color:PALETTE[0], rainbow:false, size:16, stamp:'⭐', page:null, ops:[], redo:[], live:null };
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let W=0,H=0,dpr=1;
+
+function resize(){
+  const r = cv.getBoundingClientRect(); dpr = window.devicePixelRatio||1;
+  W=r.width; H=r.height; cv.width=W*dpr; cv.height=H*dpr; draw();
+}
+function pageXf(){ const s=Math.min(W,H)/100; return {s, dx:(W-100*s)/2, dy:(H-100*s)/2}; }
+function hue(i){ return `hsl(${(i*9)%360} 85% 55%)`; }
+
+function drawStroke(c, s){
+  const pts = s.pts.map(p=>[p[0]*W,p[1]*H]);
+  c.save(); c.lineCap='round'; c.lineJoin='round'; c.lineWidth=s.w;
+  if (s.erase) c.globalCompositeOperation='destination-out'; else c.strokeStyle=c.fillStyle=s.color;
+  if (pts.length===1){ if(s.rainbow&&!s.erase) c.fillStyle=hue(0); c.beginPath(); c.arc(pts[0][0],pts[0][1],s.w/2,0,Math.PI*2); c.fill(); c.restore(); return; }
+  if (s.rainbow && !s.erase){ for(let i=1;i<pts.length;i++){ c.strokeStyle=hue(i); c.beginPath(); c.moveTo(...pts[i-1]); c.lineTo(...pts[i]); c.stroke(); } c.restore(); return; }
+  c.beginPath(); c.moveTo(...pts[0]);
+  for(let i=1;i<pts.length-1;i++){ const m=[(pts[i][0]+pts[i+1][0])/2,(pts[i][1]+pts[i+1][1])/2]; c.quadraticCurveTo(...pts[i],...m); }
+  c.lineTo(...pts[pts.length-1]); c.stroke(); c.restore();
+}
+
+function draw(){
+  ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+  const pg = st.page && PAGES[st.page];
+  const {s,dx,dy} = pageXf();
+  const fills = {}; st.ops.forEach(o=>{ if(o.type==='fill') fills[o.i]=o.color; });
+  if (pg){ ctx.save(); ctx.translate(dx,dy); ctx.scale(s,s); pg.regions.forEach((p,i)=>{ ctx.fillStyle=fills[i]||'#fff'; ctx.fill(p); }); ctx.restore(); }
+  // strokes + stamps on their own layer so the eraser leaves fills alone
+  const layer = document.createElement('canvas'); layer.width=W*dpr; layer.height=H*dpr;
+  const lc = layer.getContext('2d'); lc.setTransform(dpr,0,0,dpr,0,0);
+  const all = st.live ? [...st.ops, st.live] : st.ops;
+  all.forEach(o=>{
+    if (o.type==='stroke') drawStroke(lc,o);
+    else if (o.type==='stamp'){ lc.font=`${o.size}px serif`; lc.textAlign='center'; lc.textBaseline='middle'; lc.fillText(o.emoji,o.x*W,o.y*H); }
+  });
+  ctx.drawImage(layer,0,0,W,H);
+  if (pg){ ctx.save(); ctx.translate(dx,dy); ctx.scale(s,s); ctx.lineWidth=3/s; ctx.lineJoin='round'; ctx.strokeStyle='#212121'; pg.regions.forEach(p=>ctx.stroke(p)); ctx.restore(); }
+}
+
+function pos(e){ const r=cv.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; }
+let down=false;
+cv.addEventListener('pointerdown', e=>{
+  if (down) return; down=true; cv.setPointerCapture(e.pointerId);
+  const [x,y]=pos(e), nx=Math.min(1,Math.max(0,x/W)), ny=Math.min(1,Math.max(0,y/H));
+  if (st.tool==='brush'||st.tool==='eraser'){
+    st.live={type:'stroke',pts:[[nx,ny]],w:st.tool==='eraser'?st.size*1.6:st.size,color:st.color,rainbow:st.rainbow,erase:st.tool==='eraser'};
+  } else if (st.tool==='stamp'){ push({type:'stamp',emoji:st.stamp,x:nx,y:ny,size:40+st.size*3}); }
+  else if (st.tool==='fill' && st.page){
+    const {s,dx,dy}=pageXf(), regs=PAGES[st.page].regions;
+    // isPointInPath: point is in bitmap pixels, path is transformed by the CTM.
+    ctx.setTransform(dpr*s,0,0,dpr*s,dpr*dx,dpr*dy);
+    for(let i=regs.length-1;i>=0;i--){
+      if (ctx.isPointInPath(regs[i], x*dpr, y*dpr)){
+        push({type:'fill',i,color: st.rainbow?`hsl(${Math.random()*360} 80% 60%)`:st.color}); break; }
+    }
+  }
+  draw();
+});
+cv.addEventListener('pointermove', e=>{
+  if(!down||!st.live) return; const [x,y]=pos(e);
+  st.live.pts.push([Math.min(1,Math.max(0,x/W)),Math.min(1,Math.max(0,y/H))]); draw();
+});
+const up=()=>{ if(!down) return; down=false; if(st.live){ const s=st.live; st.live=null; push(s); } draw(); };
+cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',up);
+
+function push(op){ st.ops.push(op); st.redo=[]; refresh(); }
+
+// ---- UI ----
+function btn(label, fn, dis){ const b=document.createElement('button'); b.className='act'; b.textContent=label; b.disabled=!!dis; b.onclick=fn; return b; }
+function refresh(){
+  const top=document.getElementById('top'); top.replaceChildren(
+    btn('🖼 Pictures', pickPage),
+    btn('↩ Undo', ()=>{ st.redo.push(st.ops.pop()); refresh(); draw(); }, !st.ops.length),
+    btn('↪ Redo', ()=>{ st.ops.push(st.redo.pop()); refresh(); draw(); }, !st.redo.length),
+    btn('🗑 Clear', ()=>confirmClear(), !st.ops.length),
+    btn('🔒 Grown-ups', gate));
+  const tools=document.getElementById('tools'); tools.replaceChildren();
+  const T=[['brush','🖌️','Draw'],['eraser','🧽','Erase'],['stamp',st.stamp,'Stamp']]; if(st.page) T.push(['fill','🪣','Fill']);
+  T.forEach(([id,em,lb])=>{ const b=document.createElement('button'); b.className='tool'+(st.tool===id?' sel':''); b.innerHTML=`${em}<small>${lb}</small>`; b.onclick=()=>{st.tool=id;refresh();}; tools.append(b); });
+  const sp=document.createElement('span'); sp.style.width='12px'; sp.style.flex='none'; tools.append(sp);
+  SIZES.forEach(s=>{ const b=document.createElement('button'); b.className='size'+(st.size===s?' sel':''); b.innerHTML=`<i style="width:${s}px;height:${s}px"></i>`; b.onclick=()=>{st.size=s;refresh();}; tools.append(b); });
+  const opts=document.getElementById('opts'); opts.replaceChildren();
+  if (st.tool==='stamp') STAMPS.forEach(s=>{ const b=document.createElement('button'); b.className='stamp'+(st.stamp===s?' sel':''); b.textContent=s; b.onclick=()=>{st.stamp=s;refresh();}; opts.append(b); });
+  else {
+    const rb=document.createElement('button'); rb.className='color rainbow'+(st.rainbow?' sel':''); rb.onclick=()=>{st.rainbow=true; if(st.tool==='eraser')st.tool='brush'; refresh();}; opts.append(rb);
+    PALETTE.forEach(c=>{ const b=document.createElement('button'); b.className='color'+(!st.rainbow&&st.color===c?' sel':''); b.style.background=c; b.onclick=()=>{st.color=c;st.rainbow=false; if(st.tool==='eraser')st.tool='brush'; refresh();}; opts.append(b); });
+  }
+}
+const dlg=document.getElementById('dlg');
+function showDialog(html, wire){ dlg.innerHTML=html; wire(dlg); dlg.showModal(); }
+function confirmClear(){ showDialog(`<div>Start over? 🧹</div><div class="choices"><button id="n">No</button><button id="y">Yes</button></div>`, d=>{
+  d.querySelector('#n').onclick=()=>d.close(); d.querySelector('#y').onclick=()=>{ st.ops=[]; st.redo=[]; d.close(); refresh(); draw(); }; }); }
+function pickPage(){ showDialog(`<div>Pick a picture</div><div class="choices"><button data-p="">📄<br>Blank</button>${Object.entries(PAGES).map(([n,p])=>`<button data-p="${n}">${p.emoji}<br>${n}</button>`).join('')}</div>`, d=>{
+  d.querySelectorAll('button').forEach(b=>b.onclick=()=>{ st.page=b.dataset.p||null; st.ops=[]; st.redo=[]; st.tool=st.page?'fill':'brush'; d.close(); refresh(); draw(); }); }); }
+function gate(){ const a=6+Math.floor(Math.random()*5), b=6+Math.floor(Math.random()*5), ans=a+b; const opts=new Set([ans]); while(opts.size<4){ const w=ans+Math.floor(Math.random()*9)-4; if(w>0) opts.add(w);}
+  showDialog(`<div>Grown-ups only 🔒</div><div style="font-size:28px;margin-top:8px">What is ${a} + ${b} ?</div><div class="choices">${[...opts].sort(()=>Math.random()-.5).map(o=>`<button data-o="${o}">${o}</button>`).join('')}<button id="c">Cancel</button></div>`, d=>{
+    d.querySelectorAll('[data-o]').forEach(x=>x.onclick=()=>{ d.close(); if(+x.dataset.o===ans){ const a=document.createElement('a'); a.href=cv.toDataURL('image/png'); a.download='doodle.png'; a.click(); } });
+    d.querySelector('#c').onclick=()=>d.close(); }); }
+
+window.addEventListener('resize', resize);
+refresh(); resize();
+</script>
+</body>
+</html>

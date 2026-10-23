@@ -1,0 +1,31 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "doodle-web",
+      "runtimeExecutable": "/Users/apple/flutter/bin/flutter",
+      "runtimeArgs": [
+        "run",
+        "-d",
+        "web-server",
+        "--web-port",
+        "8765",
+        "--web-hostname",
+        "localhost"
+      ],
+      "port": 8765
+    },
+    {
+      "name": "doodle-release",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8766",
+        "--directory",
+        "build/web"
+      ],
+      "port": 8766
+    }
+  ]
+}
