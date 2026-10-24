@@ -22,6 +22,8 @@ pubspec, loaded in `lib/emoji_font.dart`. Bare `TextStyle`s outside the theme (p
 `fontFamilyFallback: kEmojiFallback`.
 
 ## Commands
+- Cloud sessions: `.claude/hooks/session-start.sh` installs current stable Flutter to `~/flutter`, runs
+  `flutter create .` and `pub get` (~2 min on first start). The root warning from `flutter` is harmless.
 - Web preview without opening Chrome: `flutter run -d web-server --web-port 8765` (`.claude/launch.json`
   has it). After a restart the first page load is blank while DDC compiles; reload once.
 - Single test by name: `flutter test --plain-name "stroke can be undone and redone"`
