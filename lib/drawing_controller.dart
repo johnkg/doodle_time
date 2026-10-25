@@ -54,8 +54,12 @@ class DrawingController extends ChangeNotifier {
 
   // ---- persistence --------------------------------------------------------
 
+  /// Bump when coloring page regions change: fills point at regions by index,
+  /// so fills from an older version are dropped on load (strokes are kept).
+  static const int saveVersion = 2;
+
   String encode() => jsonEncode({
-        'v': 1,
+        'v': saveVersion,
         'page': page?.name,
         'ops': [for (final op in ops) op.toJson()],
       });
@@ -80,10 +84,12 @@ class DrawingController extends ChangeNotifier {
     for (final candidate in coloringPages) {
       if (candidate.name == pageName) p = candidate;
     }
+    final oldRegions = (map['v'] as int? ?? 1) < saveVersion;
     final loaded = <DrawOp>[];
     for (final item in (map['ops'] as List? ?? const [])) {
       final op = DrawOp.fromJson(item as Map<String, dynamic>);
-      if (op != null) loaded.add(op);
+      if (op == null || (oldRegions && op is FillOp)) continue;
+      loaded.add(op);
     }
     page = p;
     ops

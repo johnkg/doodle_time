@@ -8,8 +8,9 @@ Flutter drawing + coloring app for kids 4-7. Test on web first (`flutter run -d 
 Owner: Joseph, senior .NET dev, new to Flutter. Keep replies short.
 
 ## STATUS: runs on web, not yet on a phone
-Flutter SDK: `~/flutter/bin/flutter` (3.47.x stable). As of 2026-10-24 `flutter analyze` is clean, all 27
-tests pass, and the app runs in the browser. All 12 coloring pages and 24 lessons were checked visually.
+Flutter SDK: `~/flutter/bin/flutter` (3.47.x stable). As of 2026-10-25 `flutter analyze` is clean, all tests
+pass, and the app runs in the browser. All 12 coloring pages and 24 lessons were redrawn in a detailed,
+coloring-book style and checked visually (render tool below).
 
 Still unverified at runtime: `lib/save_png_web.dart` (package:web API), `audioplayers`/`flutter_tts` web
 behavior, Android/iOS.
@@ -27,6 +28,8 @@ pubspec, loaded in `lib/emoji_font.dart`. Bare `TextStyle`s outside the theme (p
 - Web preview without opening Chrome: `flutter run -d web-server --web-port 8765` (`.claude/launch.json`
   has it). After a restart the first page load is blank while DDC compiles; reload once.
 - Single test by name: `flutter test --plain-name "stroke can be undone and redone"`
+- Render every page and lesson to PNG for a visual check (skipped in normal runs):
+  `RENDER_ART=/some/dir flutter test test/render_art_test.dart`
 - Single group: `flutter test --plain-name "daily drawing"`
 - CI runs `flutter analyze --no-fatal-infos`, `flutter test`, `flutter build web --release`
 - Platform folders (`android/ ios/ web/ ...`), `.metadata`, `analysis_options.yaml` and `pubspec.lock` are
@@ -62,15 +65,24 @@ pubspec, loaded in `lib/emoji_font.dart`. Bare `TextStyle`s outside the theme (p
 ## Adding content
 - Lesson: `_myGuide()` in `lib/guides.dart` returning `DrawingGuide(name, emoji, steps)`, append to
   `drawingGuides` as `_lv(level, _myGuide())` (1 easy, 2 medium, 3 harder). Use `_dot` for filled eyes/buttons.
-  Each step's text must have speakable words (a test checks).
+  3-8 steps. Each step's text must have speakable words (a test checks). The reference picture strokes every
+  shape and nothing hides anything, so touching parts must end on each other's edge (open curves, `_flip` for
+  mirrored halves, `_ellipseOutside`) instead of overlapping.
 - Coloring page: `_myPage()` in `lib/pages.dart` returning `ColoringPage(name, emoji, regions)`, append to
-  `coloringPages`. Later regions draw on top of earlier ones.
+  `coloringPages`. Later regions draw on top of earlier ones. `Region(path, details: [...])` adds thin texture
+  lines clipped to the region (not tappable). A test requires every region to keep >= 12 square units visible.
+- Shared path builders are in `lib/shapes.dart` (`smoothPath`/`blobPath` draw a smooth curve through points,
+  `ellipsePath` can rotate, `starPoints`, ...).
+- Fills are saved by region index. When a page's regions change, bump `DrawingController.saveVersion`; older
+  saves then drop their fills and keep strokes and stamps.
 
 ## Map
 - `lib/models.dart` ops (stroke/stamp/fill) + JSON
 - `lib/drawing_controller.dart` state, undo/redo, pointer logic, autosave; palette/stamps/brush constants
 - `lib/drawing_store.dart` DrawingStore + ProgressStore (shared_preferences)
-- `lib/pages.dart` 12 coloring pages (tap-to-fill regions)
+- `lib/shapes.dart` path builders shared by pages and lessons
+- `lib/pages.dart` 12 coloring pages (tap-to-fill regions + detail lines)
+- `test/render_art_test.dart` PNG render of all art (only runs with `RENDER_ART` set)
 - `lib/guides.dart`, `lib/guide_painter.dart` 24 step-by-step lessons (level 1-3) + reference painter
 - `lib/daily.dart` today's lesson by date, `day:YYYY-MM-DD` keys, streak
 - `lib/draw_screen.dart` all UI (large; consider splitting widgets into files)

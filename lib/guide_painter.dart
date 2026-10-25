@@ -27,7 +27,7 @@ class GuidePreviewPainter extends CustomPainter {
       final color = isCurrent ? _current : _old;
       final stroke = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = isCurrent ? 3.4 : 2.4
+        ..strokeWidth = isCurrent ? 2.6 : 1.8
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..color = color;

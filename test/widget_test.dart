@@ -133,6 +133,29 @@ void main() {
         expect(p.regions, isNotEmpty);
       }
     });
+
+    test('every region has enough visible area to tap', () {
+      // Sample the page every half unit; each region must be the top one
+      // somewhere in at least 12 square units (48 samples).
+      final tooSmall = <String>[];
+      for (final p in coloringPages) {
+        final hits = List<int>.filled(p.regions.length, 0);
+        for (double y = 0.25; y < 100; y += 0.5) {
+          for (double x = 0.25; x < 100; x += 0.5) {
+            for (int i = p.regions.length - 1; i >= 0; i--) {
+              if (p.regions[i].path.contains(Offset(x, y))) {
+                hits[i]++;
+                break;
+              }
+            }
+          }
+        }
+        for (int i = 0; i < hits.length; i++) {
+          if (hits[i] < 48) tooSmall.add('${p.name} region $i (${hits[i]})');
+        }
+      }
+      expect(tooSmall, isEmpty);
+    });
   });
 
   group('persistence', () {
@@ -175,9 +198,19 @@ void main() {
 
     test('unknown ops in save are skipped', () {
       final c = DrawingController();
-      c.decode('{"v":1,"page":null,"ops":[{"t":"zzz"},{"t":"f","i":0,"c":4278190080}]}');
+      c.decode('{"v":2,"page":null,"ops":[{"t":"zzz"},{"t":"f","i":0,"c":4278190080}]}');
       expect(c.ops.length, 1);
       expect(c.ops.single, isA<FillOp>());
+    });
+
+    test('fills from saves made before the page redraw are dropped', () {
+      final c = DrawingController();
+      c.decode('{"v":1,"page":"Fish","ops":['
+          '{"t":"f","i":3,"c":4278190080},'
+          '{"t":"s","c":4278190080,"w":16,"r":false,"e":false,'
+          '"p":[0.1,0.1,0.2,0.2]}]}');
+      expect(c.page?.name, 'Fish');
+      expect(c.ops.single, isA<StrokeOp>());
     });
   });
 
@@ -208,13 +241,14 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sun'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('step 1 of 4'), findsOneWidget);
+      final n = drawingGuides.firstWhere((g) => g.name == 'Sun').steps.length;
+      expect(find.textContaining('step 1 of $n'), findsOneWidget);
       await tester.tap(find.textContaining('Next'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('step 2 of 4'), findsOneWidget);
+      expect(find.textContaining('step 2 of $n'), findsOneWidget);
       await tester.tap(find.textContaining('Back'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('step 1 of 4'), findsOneWidget);
+      expect(find.textContaining('step 1 of $n'), findsOneWidget);
     });
   });
 
@@ -303,7 +337,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sun'));
       await tester.pumpAndSettle();
-      for (int i = 0; i < 3; i++) {
+      final n = drawingGuides.firstWhere((g) => g.name == 'Sun').steps.length;
+      for (int i = 0; i < n - 1; i++) {
         await tester.tap(find.textContaining('Next'));
         await tester.pumpAndSettle();
       }
