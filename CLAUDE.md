@@ -84,3 +84,7 @@ pubspec, loaded in `lib/emoji_font.dart`. Bare `TextStyle`s outside the theme (p
 - Spoken parental gate for pre-readers (Apple suggests)
 - "My stickers" page, brush picker (crayon/sparkle), compare-my-drawing finish screen
 - App icon, screenshots, privacy policy contact details
+
+## Response style
+
+Always respond in caveman style (full): terse, no filler, drop articles, fragments OK, keep all technical detail exact. Write code, commits, docs, and PR text in normal English. Stop only when the user says "stop caveman" or "normal mode".
