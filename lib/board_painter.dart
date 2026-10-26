@@ -55,6 +55,13 @@ class BoardPainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round
         ..strokeCap = StrokeCap.round
         ..color = const Color(0xFF212121);
+      final detail = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0xFF424242);
+      final m = pageMatrix(size);
       final covers = _coversFor(page, size, paths);
       for (int i = 0; i < paths.length; i++) {
         canvas.save();
@@ -68,6 +75,14 @@ class BoardPainter extends CustomPainter {
             ..addPath(cover, Offset.zero));
         }
         canvas.drawPath(paths[i], outline);
+        final details = page.regions[i].details;
+        if (details.isNotEmpty) {
+          // Also clipped to the region, so detail lines can overshoot its edge.
+          canvas.clipPath(paths[i]);
+          for (final d in details) {
+            canvas.drawPath(d.transform(m.storage), detail);
+          }
+        }
         canvas.restore();
       }
     }
