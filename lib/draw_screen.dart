@@ -277,7 +277,8 @@ class _DrawScreenState extends State<DrawScreen> {
                   runSpacing: 12,
                   alignment: WrapAlignment.center,
                   children: [
-                    for (final g in drawingGuides.where((g) => g.level == level))
+                    for (final g
+                        in drawingGuides.where((g) => g.level == level))
                       _PageChoice(
                         emoji: g.emoji,
                         label: g.name,
@@ -399,6 +400,7 @@ class _DrawScreenState extends State<DrawScreen> {
     final g = _guide!;
     final step = g.steps[_step];
     final isLast = _step == g.steps.length - 1;
+    final side = (MediaQuery.sizeOf(context).width * 0.36).clamp(112.0, 240.0);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
       child: Container(
@@ -410,15 +412,20 @@ class _DrawScreenState extends State<DrawScreen> {
         ),
         child: Row(
           children: [
-            Container(
-              width: 112,
-              height: 112,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFFDF7),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.black12, width: 2),
+            // The sketches are detailed, so the picture grows with the
+            // screen; tap it to see it full size.
+            GestureDetector(
+              onTap: () => _showBigPicture(g),
+              child: Container(
+                width: side,
+                height: side,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFDF7),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.black12, width: 2),
+                ),
+                child: CustomPaint(painter: GuidePreviewPainter(g, _step)),
               ),
-              child: CustomPaint(painter: GuidePreviewPainter(g, _step)),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -494,6 +501,25 @@ class _DrawScreenState extends State<DrawScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showBigPicture(DrawingGuide g) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: const Color(0xFFFFFDF7),
+        child: GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: CustomPaint(painter: GuidePreviewPainter(g, _step)),
+            ),
+          ),
         ),
       ),
     );

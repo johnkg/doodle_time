@@ -198,7 +198,8 @@ void main() {
 
     test('unknown ops in save are skipped', () {
       final c = DrawingController();
-      c.decode('{"v":2,"page":null,"ops":[{"t":"zzz"},{"t":"f","i":0,"c":4278190080}]}');
+      c.decode(
+          '{"v":2,"page":null,"ops":[{"t":"zzz"},{"t":"f","i":0,"c":4278190080}]}');
       expect(c.ops.length, 1);
       expect(c.ops.single, isA<FillOp>());
     });
@@ -232,6 +233,17 @@ void main() {
             expect(b.bottom, lessThanOrEqualTo(100), reason: g.name);
           }
         }
+      }
+    });
+
+    test('helper lines start each lesson and are gone in the last step', () {
+      for (final g in drawingGuides) {
+        bool has(GuideStep s, GuideKind k) => s.shapes.any((x) => x.kind == k);
+        expect(g.steps.any((s) => has(s, GuideKind.guide)), isTrue,
+            reason: g.name);
+        expect(has(g.steps.last, GuideKind.guide), isFalse, reason: g.name);
+        expect(g.steps.any((s) => has(s, GuideKind.shade)), isTrue,
+            reason: g.name);
       }
     });
 
@@ -350,7 +362,8 @@ void main() {
     });
 
     test('speakable keeps words and drops emoji', () {
-      expect(SpeechService.speakable('Draw a big circle ⭕'), 'Draw a big circle');
+      expect(
+          SpeechService.speakable('Draw a big circle ⭕'), 'Draw a big circle');
       expect(SpeechService.speakable('Add two eyes 👀'), 'Add two eyes');
       expect(SpeechService.speakable('⭕'), isEmpty);
     });
