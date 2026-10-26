@@ -15,7 +15,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 final String? _out = Platform.environment['RENDER_ART'];
 
-Future<void> _save(String name, int w, int h, void Function(Canvas) draw) async {
+Future<void> _save(
+    String name, int w, int h, void Function(Canvas) draw) async {
   final rec = ui.PictureRecorder();
   final canvas = Canvas(rec);
   canvas.drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
@@ -62,8 +63,8 @@ void main() {
         await _save(filled ? 'pages_filled' : 'pages', 4 * tile.toInt(),
             3 * tile.toInt(), (cv) {
           for (int i = 0; i < coloringPages.length; i++) {
-            _page(cv, coloringPages[i],
-                Offset(i % 4 * tile, i ~/ 4 * tile), tile - 6, filled);
+            _page(cv, coloringPages[i], Offset(i % 4 * tile, i ~/ 4 * tile),
+                tile - 6, filled);
           }
         });
       }
@@ -79,7 +80,14 @@ void main() {
           }
         });
       }
-      await _save('lessons', 6 * tile.toInt(), 4 * tile.toInt(), (cv) {
+      for (final g in drawingGuides) {
+        await _save('final_${g.name}', 600, 600, (cv) {
+          GuidePreviewPainter(g, g.steps.length - 1)
+              .paint(cv, const Size(600, 600));
+        });
+      }
+      final rows = (drawingGuides.length / 6).ceil();
+      await _save('lessons', 6 * tile.toInt(), rows * tile.toInt(), (cv) {
         for (int i = 0; i < drawingGuides.length; i++) {
           final g = drawingGuides[i];
           cv.save();
