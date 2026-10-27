@@ -2854,114 +2854,151 @@ DrawingGuide _penguin() {
 }
 
 DrawingGuide _giraffe() {
-  final head = blobPath(const [
-    Offset(64, 18),
-    Offset(69, 14.6),
-    Offset(76, 14.6),
-    Offset(81.6, 17.4),
-    Offset(84, 22.4),
-    Offset(82.6, 27.6),
-    Offset(77, 29.6),
-    Offset(70, 28.6),
-    Offset(65, 25),
-  ]);
-  final body = blobPath(const [
-    Offset(58, 55),
-    Offset(46, 53.2),
-    Offset(32, 54),
-    Offset(24, 58.6),
-    Offset(22.6, 66),
-    Offset(27, 72.6),
-    Offset(40, 74.6),
-    Offset(55, 73.6),
-    Offset(61.8, 68),
-    Offset(62.6, 58.4),
-  ]);
-  const backNeck = [
-    Offset(66, 27),
-    Offset(63.6, 38),
-    Offset(60.6, 50.6),
-    Offset(58, 55)
+  // The head is drawn small, then grown around its horns so it stays cute.
+  const pivot = Offset(76, 8);
+  const grow = 1.15;
+  Offset hp(Offset p) => pivot + (p - pivot) * grow;
+  final headMatrix = Matrix4.translationValues(pivot.dx, pivot.dy, 0) *
+      Matrix4.diagonal3Values(grow, grow, 1) *
+      Matrix4.translationValues(-pivot.dx, -pivot.dy, 0);
+  List<GuideShape> head(List<GuideShape> shapes) => [
+        for (final s in shapes)
+          GuideShape(s.path.transform(headMatrix.storage), kind: s.kind),
+      ];
+  final backNeck = [
+    hp(const Offset(63.5, 24.5)),
+    const Offset(60.5, 37),
+    const Offset(56.5, 46),
+    const Offset(53, 51),
   ];
-  const frontNeck = [
-    Offset(74, 29.4),
-    Offset(71, 40),
-    Offset(67.6, 52),
-    Offset(62.6, 58.4)
+  final frontNeck = [
+    hp(const Offset(76, 29)),
+    const Offset(73, 41),
+    const Offset(69.5, 50),
+    const Offset(68, 58),
   ];
+  const bodyLine = [
+    Offset(53, 51),
+    Offset(44, 51.4),
+    Offset(32, 53),
+    Offset(23, 57.5),
+    Offset(19.5, 64),
+    Offset(22, 70.5),
+    Offset(30, 73.5),
+    Offset(42, 74.6),
+    Offset(56, 74.2),
+    Offset(65, 71.5),
+    Offset(69.2, 65),
+    Offset(68, 58),
+  ];
+  const headPts = [
+    Offset(62.5, 19),
+    Offset(65.5, 13),
+    Offset(72, 10.6),
+    Offset(79, 13),
+    Offset(84.5, 18.4),
+    Offset(88, 23.6),
+    Offset(86.6, 28.4),
+    Offset(80.6, 30),
+    Offset(73.4, 29.4),
+    Offset(66.6, 26),
+  ];
+  final headArea = blobPath([for (final p in headPts) hp(p)]);
+  final body = blobPath(bodyLine);
   final neck = blobPath([...backNeck, ...frontNeck.reversed]);
-  final coat = Path.combine(
-      PathOperation.union, _minus(body, circlePath(60, 60, 4)), neck);
+  final coat = _minus(
+      Path.combine(PathOperation.union, body, neck), rectPath(40, 0, 100, 41));
+  final patches = _spots(coat, 20, 3.1, seed: 11, patchy: true);
+  final back = smoothPath(backNeck).computeMetrics().first;
+  // Legs hang from the belly; the lower leg is a little thinner.
+  const legs = <(double, double)>[
+    (25.5, 71.6),
+    (33, 73.6),
+    (50, 74.5),
+    (58, 73.8)
+  ];
+  List<GuideShape> leg(double x, double top) => [
+        _smooth([Offset(x, top), Offset(x - 0.4, 82), Offset(x + 0.2, 91)]),
+        _smooth([
+          Offset(x + 4.4, top + 0.4),
+          Offset(x + 4.8, 82),
+          Offset(x + 3.9, 91)
+        ]),
+        _round(x - 0.3, 91, x + 4.4, 94.2, 1.2),
+      ];
+  GuideShape tuft(double t) {
+    final p = back.getTangentForOffset(back.length * t)!.position;
+    return GuideShape(Path()
+      ..moveTo(p.dx, p.dy)
+      ..quadraticBezierTo(p.dx - 1.2, p.dy - 2.6, p.dx - 3.8, p.dy - 2.4));
+  }
+
   return DrawingGuide('Giraffe', '🦒', [
-    GuideStep('Draw an oval for the body and one for the head 🥚', [
-      _helpOval(42, 64, 20, 10.5),
-      _helpOval(73.5, 22, 10, 7.5, angle: 0.15),
-      _helpLine(const [Offset(58, 58), Offset(69, 27)]),
-    ]),
-    GuideStep('Draw the head with a long nose 🦒', [GuideShape(head)]),
-    GuideStep('Add little horns, an ear and a happy face 😊', [
-      _line(const [Offset(68.6, 15.4), Offset(67.6, 9.8)]),
-      _circle(67.4, 8.4, 1.4),
-      _line(const [Offset(72.6, 14.7), Offset(72.6, 9.4)]),
-      _circle(72.6, 8, 1.4),
-      _leaf(const Offset(65.2, 17.4), const Offset(58.6, 14), 2.6),
-      ..._eye(71, 20.4, 2),
-      _dot(81.2, 21.2, 0.6),
-      _smooth(const [Offset(77.4, 25.8), Offset(80, 26.6), Offset(82.4, 25.6)]),
-      _blush(75.4, 24),
-    ]),
-    GuideStep('Draw a long, long neck and the body ⬆️', [
+    GuideStep(
+        'Draw a big oval for the body, a circle for the head and a slanted line for the neck 🥚',
+        [
+          _helpOval(44, 63, 25, 12.5),
+          ...head([_helpOval(74.5, 20.5, 12.5, 9.5, angle: 0.25)]),
+          _helpLine([const Offset(54, 54), hp(const Offset(66, 20))]),
+        ]),
+    GuideStep(
+        'Draw a head with a long, round nose 🦒',
+        head([
+          GuideShape(blobPath(headPts)),
+          _smooth(const [Offset(66.6, 26), Offset(72, 28), Offset(80, 28.8)]),
+        ])),
+    GuideStep(
+        'Add two little horns with balls on top and an ear 👂',
+        head([
+          _line(const [Offset(69, 11.4), Offset(68, 5.6)]),
+          _circle(67.8, 4.2, 1.6),
+          _line(const [Offset(74.6, 10.8), Offset(75.2, 5)]),
+          _circle(75.3, 3.6, 1.6),
+          _leaf(const Offset(64.6, 17.6), const Offset(56.4, 13.4), 3.2),
+        ])),
+    GuideStep(
+        'Add a big shiny eye, a nose and a smile 😊',
+        head([
+          ..._eye(73.4, 19.6, 2.7),
+          _dot(86, 22.4, 0.8),
+          _smooth(
+              const [Offset(80, 26.4), Offset(83.4, 27.2), Offset(86, 25.8)]),
+          _blush(77.6, 24),
+        ])),
+    GuideStep('Draw a long, thick neck and a round body ⬆️', [
       _smooth(backNeck),
       _smooth(frontNeck),
-      _smooth(const [
-        Offset(58, 55),
-        Offset(46, 53.2),
-        Offset(32, 54),
-        Offset(24, 58.6),
-        Offset(22.6, 66),
-        Offset(27, 72.6),
-        Offset(40, 74.6),
-        Offset(55, 73.6),
-        Offset(61.8, 68),
-        Offset(62.6, 58.4),
-      ]),
+      _smooth(bodyLine),
     ]),
     GuideStep('Draw four long legs with hooves 🦵', [
-      for (final (x, top) in const [
-        (27.0, 72.0),
-        (34.0, 74.2),
-        (49.0, 74.4),
-        (56.0, 73.4)
-      ]) ...[
-        _line([Offset(x, top), Offset(x, 91)]),
-        _line([Offset(x + 3.4, top + 0.4), Offset(x + 3.4, 91)]),
-        _round(x - 0.4, 91, x + 3.8, 94, 0.8),
-      ],
+      for (final (x, top) in legs) ...leg(x, top),
     ]),
-    GuideStep('Add a tail and a fuzzy mane 〰️', [
-      _line(const [Offset(23.4, 61), Offset(16, 73)]),
-      _leaf(const Offset(16, 73), const Offset(13.4, 80), 2.6),
-      for (int i = 0; i < 8; i++)
-        _line([
-          Offset(65.6 - i * 0.95, 29 + i * 3.3),
-          Offset(63.2 - i * 0.95, 28 + i * 3.3),
-        ]),
+    GuideStep('Add a tail with a tuft and a fuzzy mane 〰️', [
+      _smooth(const [
+        Offset(20, 60),
+        Offset(15.4, 64),
+        Offset(13.4, 71),
+        Offset(14, 77)
+      ]),
+      _leaf(const Offset(14, 77), const Offset(12.6, 85), 3.2),
+      for (int i = 0; i < 7; i++) tuft(0.1 + 0.13 * i),
     ]),
-    GuideStep('Draw patches all over the coat 🟫', [
-      _spots(coat, 24, 2.3, seed: 3, patchy: true),
-    ]),
-    GuideStep('Rub out the helper lines and shade the patches ✏️', [
-      _hatch(
-          Path.combine(PathOperation.intersect, coat,
-              _spots(coat, 24, 2.3, seed: 3, patchy: true).path),
-          angle: 1.1,
-          gap: 0.9,
-          cross: true),
-      _hatch(_minus(body, body.shift(const Offset(0, -3))),
+    GuideStep('Rub out the helper lines and draw patches all over 🟫', [
+      patches,
+      _hatch(patches.path, angle: 1.1, gap: 0.9, cross: true),
+      _hatch(_minus(body, body.shift(const Offset(0, -4))),
           angle: 0.5, gap: 1.4, seed: 2),
-      _fine(const [Offset(8, 94.4), Offset(24, 94.6)]),
-      _fine(const [Offset(38, 94.8), Offset(46, 94.8)]),
-      _fine(const [Offset(62, 94.6), Offset(80, 94.2)]),
+      _hatch(_minus(headArea, headArea.shift(const Offset(0, -3.5))),
+          angle: 0.5, gap: 1.4, seed: 3),
+      for (final (x, _) in legs)
+        _hatch(rectPath(x + 0.6, 78, x + 1.8, 90.6),
+            angle: 1.57, gap: 0.8, seed: 4),
+      for (final (x, _) in legs)
+        _hatch(roundRectPath(x - 0.3, 91, x + 4.4, 94.2, 1.2),
+            angle: 1.1, gap: 0.8, seed: 5),
+      _fine(const [Offset(8, 95.6), Offset(24, 95.8)]),
+      _fine(const [Offset(38, 96), Offset(48, 96)]),
+      _fine(const [Offset(62, 95.8), Offset(82, 95.4)]),
     ]),
   ]);
 }
