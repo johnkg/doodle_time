@@ -31,7 +31,8 @@ pubspec, loaded in `lib/emoji_font.dart`. Bare `TextStyle`s outside the theme (p
 - Render every page and lesson to PNG for a visual check (skipped in normal runs):
   `RENDER_ART=/some/dir flutter test test/render_art_test.dart`
 - Single group: `flutter test --plain-name "daily drawing"`
-- CI runs `flutter analyze --no-fatal-infos`, `flutter test`, `flutter build web --release`
+- CI runs `flutter analyze --no-fatal-infos`, `flutter test`, `flutter build web --release --base-href /doodle_time/`;
+  pushes to `main` then deploy to GitHub Pages (https://johnkg.github.io/doodle_time/). Local `flutter run` is unaffected.
 - Platform folders (`android/ ios/ web/ ...`), `.metadata`, `analysis_options.yaml` and `pubspec.lock` are
   gitignored: they come from `flutter create .`. CI regenerates them each run, so don't put hand edits there.
 
