@@ -17,6 +17,9 @@ No Mac? Push to GitHub: `.github/workflows/ci.yml` runs analyze, test, and `flut
 cloud and uploads the web build as an artifact. Android builds work on Windows/Linux/Mac. iOS needs a Mac
 (or a cloud Mac service).
 
+Live site: every push to `main` that passes CI is published to GitHub Pages at
+https://johnkg.github.io/doodle_time/ (one-time setup: repo Settings > Pages > Source = GitHub Actions).
+
 ## Features
 
 - Draw with finger/mouse: 3 brush sizes, 10 colors, rainbow brush
