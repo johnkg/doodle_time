@@ -361,6 +361,29 @@ void main() {
       expect(progress.done, contains('Sun'));
     });
 
+    // Share of the screen height the canvas must keep during a lesson.
+    for (final (size, share) in const [
+      (Size(1200, 800), 0.5),
+      (Size(1400, 700), 0.5),
+      (Size(390, 844), 0.44),
+      (Size(360, 640), 0.25),
+    ]) {
+      testWidgets('lesson panel leaves the canvas room to draw on ($size)',
+          (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(const KidsDrawApp());
+        await tester.tap(find.text('Pictures'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Sun'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('step 1 of'), findsOneWidget);
+        expect(tester.getSize(find.byKey(const ValueKey('canvas'))).height,
+            greaterThan(size.height * share));
+      });
+    }
+
     test('speakable keeps words and drops emoji', () {
       expect(
           SpeechService.speakable('Draw a big circle ⭕'), 'Draw a big circle');
@@ -374,6 +397,42 @@ void main() {
           expect(SpeechService.speakable(s.text), isNotEmpty, reason: s.text);
         }
       }
+    });
+  });
+
+  group('speech voice', () {
+    Map<String, String> v(String name, [String locale = 'en-US']) =>
+        {'name': name, 'locale': locale};
+
+    test('prefers natural voices, skips non-English and novelty voices', () {
+      final pick = SpeechService.pickVoice([
+        v('Zarvox'),
+        v('Amelie', 'fr-FR'),
+        v('Microsoft David - English (United States)'),
+        v('Google US English'),
+        v('Microsoft Aria Online (Natural) - English (United States)'),
+      ]);
+      expect(pick?['name'], contains('Aria Online (Natural)'));
+    });
+
+    test('enhanced version of a friendly voice wins', () {
+      final pick = SpeechService.pickVoice([
+        v('Samantha'),
+        v('Samantha (Enhanced)'),
+      ]);
+      expect(pick?['name'], 'Samantha (Enhanced)');
+    });
+
+    test('no English voice means no pick', () {
+      expect(
+          SpeechService.pickVoice([v('Amelie', 'fr-FR'), v('Fred')]), isNull);
+      expect(SpeechService.pickVoice([]), isNull);
+    });
+
+    test('lively adds an exclamation mark only when needed', () {
+      expect(SpeechService.lively('Draw a circle'), 'Draw a circle!');
+      expect(SpeechService.lively('Great job!'), 'Great job!');
+      expect(SpeechService.lively('Ready?'), 'Ready?');
     });
   });
 

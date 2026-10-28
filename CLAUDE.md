@@ -59,6 +59,10 @@ pubspec, loaded in `lib/emoji_font.dart`. Bare `TextStyle`s outside the theme (p
   difference op left hidden lines visible on web.
 - `draw_screen.dart` holds all UI state beyond drawing: lesson mode/step, daily banner, stickers, grown-ups
   menu. It owns `SoundService`/`SpeechService`; the single "Sounds and voice" switch gates both.
+- Lesson panel layout (`draw_screen.dart`): wide landscape (width >= 900 and >= 1.2x height) puts the lesson in a
+  column left of the canvas; otherwise it sits above the canvas, compact. A widget test keeps the canvas big in
+  both. Web TTS rate is raw (1.0 = normal) but phones use 0.5 = normal, see `speech_service.dart` (also picks the
+  best English voice; `pickVoice` is unit tested).
 - Saving PNG uses a conditional import: `save_png_stub.dart if (dart.library.js_interop) save_png_web.dart`.
   Same pattern for any future web-only code.
 - Progress (lesson ⭐ and daily `day:YYYY-MM-DD` entries) shares one string set in `ProgressStore`.
