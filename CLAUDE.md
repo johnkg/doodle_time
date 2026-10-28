@@ -63,6 +63,11 @@ pubspec, loaded in `lib/emoji_font.dart`. Bare `TextStyle`s outside the theme (p
   column left of the canvas; otherwise it sits above the canvas, compact. A widget test keeps the canvas big in
   both. Web TTS rate is raw (1.0 = normal) but phones use 0.5 = normal, see `speech_service.dart` (also picks the
   best English voice; `pickVoice` is unit tested).
+- Lessons are grouped in `lessonTracks` (Nature, Things, Animals; end of `guides.dart`) and every lesson must be in
+  exactly one (a test checks). `unlock.dart`: first lesson of a track is open, finishing one opens the next; a
+  grown-up can add `unlock:all` to the progress set (Grown-ups menu). Daily lesson ignores locks. Starting a
+  lesson asks "On paper" or "In the app"; paper mode (`_paper`, `_paperLesson`) is big picture + steps, no
+  canvas, and can be switched mid-lesson with the header button. No camera or network: the child taps Done.
 - Saving PNG uses a conditional import: `save_png_stub.dart if (dart.library.js_interop) save_png_web.dart`.
   Same pattern for any future web-only code.
 - Progress (lesson ⭐ and daily `day:YYYY-MM-DD` entries) shares one string set in `ProgressStore`.
@@ -88,7 +93,8 @@ pubspec, loaded in `lib/emoji_font.dart`. Bare `TextStyle`s outside the theme (p
 - `lib/shapes.dart` path builders shared by pages and lessons
 - `lib/pages.dart` 12 coloring pages (tap-to-fill regions + detail lines)
 - `test/render_art_test.dart` PNG render of all art (only runs with `RENDER_ART` set)
-- `lib/guides.dart`, `lib/guide_painter.dart` 24 step-by-step lessons (level 1-3) + reference painter
+- `lib/guides.dart`, `lib/guide_painter.dart` 25 step-by-step lessons + tracks + reference painter
+- `lib/unlock.dart` track unlock rules
 - `lib/daily.dart` today's lesson by date, `day:YYYY-MM-DD` keys, streak
 - `lib/draw_screen.dart` all UI (large; consider splitting widgets into files)
 - `lib/speech_service.dart` flutter_tts, `lib/sound_service.dart` audioplayers, `lib/parental_gate.dart` math gate

@@ -3113,3 +3113,45 @@ final List<DrawingGuide> drawingGuides = [
   _lv(3, _giraffe()),
   _lv(3, _snowman()),
 ];
+
+/// A themed chain of lessons. The first lesson is open; finishing one opens
+/// the next (see `unlock.dart`).
+class LessonTrack {
+  LessonTrack(this.name, this.emoji, List<String> lessonNames)
+      : guides = [
+          for (final n in lessonNames)
+            drawingGuides.firstWhere((g) => g.name == n),
+        ];
+  final String name;
+  final String emoji;
+  final List<DrawingGuide> guides;
+}
+
+/// Every lesson is in exactly one track, easiest first.
+final List<LessonTrack> lessonTracks = [
+  LessonTrack(
+      'Nature', '🌳', ['Sun', 'Moon', 'Tree', 'Mushroom', 'Flower', 'Snowman']),
+  LessonTrack('Things', '🏠', [
+    'Apple',
+    'House',
+    'Sailboat',
+    'Ice cream',
+    'Car',
+    'Train',
+    'Robot',
+    'Rocket',
+  ]),
+  LessonTrack('Animals', '🐾', [
+    'Fish',
+    'Bird',
+    'Turtle',
+    'Octopus',
+    'Butterfly',
+    'Penguin',
+    'Cat',
+    'Bunny',
+    'Dog',
+    'Giraffe',
+    'Lion',
+  ]),
+];

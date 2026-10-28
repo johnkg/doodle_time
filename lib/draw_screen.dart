@@ -16,6 +16,7 @@ import 'parental_gate.dart';
 import 'save_png_stub.dart' if (dart.library.js_interop) 'save_png_web.dart';
 import 'sound_service.dart';
 import 'speech_service.dart';
+import 'unlock.dart';
 
 class DrawScreen extends StatefulWidget {
   const DrawScreen({super.key, this.store, this.progressStore, this.now});
@@ -41,6 +42,10 @@ class _DrawScreenState extends State<DrawScreen> {
   int? _pointer;
   DrawingGuide? _guide;
   int _step = 0;
+
+  /// True while the child draws on real paper: the lesson fills the screen
+  /// and there is no canvas.
+  bool _paper = false;
   Set<String> _done = {};
 
   DateTime get _today => widget.now?.call() ?? DateTime.now();
@@ -48,13 +53,51 @@ class _DrawScreenState extends State<DrawScreen> {
   /// The daily card shows on a fresh, empty canvas.
   bool get _showDaily => _guide == null && !c.canUndo && c.page == null;
 
-  void _startGuide(DrawingGuide g) {
+  void _startGuide(DrawingGuide g, {bool paper = false}) {
     c.setPage(null); // fresh blank canvas
     setState(() {
       _guide = g;
       _step = 0;
+      _paper = paper;
     });
     _speakStep();
+  }
+
+  /// Asks where the child wants to draw, then starts the lesson.
+  Future<void> _chooseMode(DrawingGuide g) async {
+    final paper = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${g.emoji} ${g.name}',
+            textAlign: TextAlign.center, style: const TextStyle(fontSize: 28)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 72)),
+                onPressed: () => Navigator.pop(ctx, true),
+                child:
+                    const Text('📄 On paper', style: TextStyle(fontSize: 24)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.tonal(
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 72)),
+                onPressed: () => Navigator.pop(ctx, false),
+                child:
+                    const Text('✏️ In the app', style: TextStyle(fontSize: 24)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (paper == null || !mounted) return;
+    _startGuide(g, paper: paper);
   }
 
   @override
@@ -88,7 +131,9 @@ class _DrawScreenState extends State<DrawScreen> {
   void _speakStep() {
     final g = _guide;
     if (g == null || !sound.enabled) return;
-    speech.speak(g.steps[_step].text);
+    final text = g.steps[_step].text;
+    speech
+        .speak(_paper && _step == 0 ? 'Get a pencil and a paper. $text' : text);
   }
 
   @override
@@ -105,6 +150,7 @@ class _DrawScreenState extends State<DrawScreen> {
               final wide =
                   screen.width >= 900 && screen.width >= screen.height * 1.2;
               final sideLesson = _guide != null && wide;
+              if (_guide != null && _paper) return _paperLesson(screen, wide);
               return Column(
                 children: [
                   _topBar(),
@@ -206,6 +252,18 @@ class _DrawScreenState extends State<DrawScreen> {
                 },
               ),
               SwitchListTile(
+                secondary: const Icon(Icons.lock_open),
+                title: const Text('Unlock all lessons'),
+                value: _done.contains(unlockAllKey),
+                onChanged: (v) {
+                  final next = {..._done};
+                  v ? next.add(unlockAllKey) : next.remove(unlockAllKey);
+                  setState(() => _done = next);
+                  setSheetState(() {});
+                  widget.progressStore?.saveDone(next).catchError((_) {});
+                },
+              ),
+              SwitchListTile(
                 secondary: const Icon(Icons.volume_up),
                 title: const Text('Sounds and voice'),
                 value: sound.enabled,
@@ -264,9 +322,20 @@ class _DrawScreenState extends State<DrawScreen> {
     if (yes == true) c.clear();
   }
 
+  /// A locked lesson was tapped: say which lesson opens it.
+  void _explainLocked(DrawingGuide before) {
+    final line = 'Draw the ${before.name} first to open this one!';
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('🔒 $line')));
+    if (sound.enabled) speech.speak(line);
+  }
+
   void _pickPage() {
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (ctx) => SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -277,41 +346,50 @@ class _DrawScreenState extends State<DrawScreen> {
                 '✏️ Learn to draw · ⭐ ${drawingGuides.where((g) => _done.contains(g.name)).length}/${drawingGuides.length}',
                 style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
               ),
-              for (final level in const [1, 2, 3]) ...[
+              for (final track in lessonTracks) ...[
                 const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    const {
-                      1: '⭐ Easy',
-                      2: '⭐⭐ Medium',
-                      3: '⭐⭐⭐ Harder',
-                    }[level]!,
+                    '${track.emoji} ${track.name}',
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: Colors.black54,
                     ),
                   ),
                 ),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    for (final g
-                        in drawingGuides.where((g) => g.level == level))
-                      _PageChoice(
-                        emoji: g.emoji,
-                        label: g.name,
-                        done: _done.contains(g.name),
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          _startGuide(g);
-                        },
-                      ),
-                  ],
+                // One chain of lessons: finish a lesson to open the next.
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (int i = 0; i < track.guides.length; i++) ...[
+                        if (i > 0)
+                          Container(
+                            width: 18,
+                            height: 4,
+                            margin: const EdgeInsets.only(top: 42),
+                            color: Colors.black12,
+                          ),
+                        _LessonNode(
+                          guide: track.guides[i],
+                          locked: !isUnlocked(track, i, _done),
+                          done: _done.contains(track.guides[i].name),
+                          onTap: () {
+                            if (!isUnlocked(track, i, _done)) {
+                              _explainLocked(lessonBefore(track, i)!);
+                              return;
+                            }
+                            Navigator.pop(ctx);
+                            _chooseMode(track.guides[i]);
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ],
               const SizedBox(height: 20),
@@ -405,7 +483,7 @@ class _DrawScreenState extends State<DrawScreen> {
             const SizedBox(width: 8),
             FilledButton(
               style: FilledButton.styleFrom(minimumSize: const Size(88, 52)),
-              onPressed: () => _startGuide(g),
+              onPressed: () => _chooseMode(g),
               child: Text(
                 doneToday ? 'Again' : 'Start ▶',
                 style: const TextStyle(fontSize: 18),
@@ -455,6 +533,16 @@ class _DrawScreenState extends State<DrawScreen> {
           padding: EdgeInsets.zero,
           icon: const Icon(Icons.volume_up),
           onPressed: () => speech.speak(g.steps[_step].text),
+        ),
+        IconButton(
+          tooltip: _paper ? 'Draw in the app' : 'Draw on paper',
+          constraints: tight,
+          padding: EdgeInsets.zero,
+          icon: Icon(_paper ? Icons.brush : Icons.description_outlined),
+          onPressed: () {
+            setState(() => _paper = !_paper);
+            if (_paper) _speakStep();
+          },
         ),
         IconButton(
           tooltip: 'Close lesson',
@@ -574,6 +662,70 @@ class _DrawScreenState extends State<DrawScreen> {
     );
   }
 
+  /// Whole-screen lesson for drawing on real paper: big picture, one step at a
+  /// time, no canvas.
+  Widget _paperLesson(Size screen, bool wide) {
+    final g = _guide!;
+    // A square as big as fits; without the AspectRatio the picture has no
+    // size of its own and collapses.
+    final picture = Padding(
+      padding: const EdgeInsets.all(12),
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: DecoratedBox(
+            decoration: _guideBox,
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: _guidePicture(g),
+            ),
+          ),
+        ),
+      ),
+    );
+    final info = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: _guideBox,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _guideHeader(g),
+              if (_step == 0)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 4),
+                  child: Text('📄 Get a pencil and a paper',
+                      style: TextStyle(fontSize: 18, color: Colors.deepPurple)),
+                ),
+              _guideText(g, 24),
+              const SizedBox(height: 8),
+              _guideButtons(g),
+            ],
+          ),
+        ),
+      ),
+    );
+    return wide
+        ? Row(
+            children: [
+              Expanded(child: picture),
+              SizedBox(
+                width: (screen.width * 0.34).clamp(300.0, 420.0),
+                child: Align(alignment: Alignment.center, child: info),
+              ),
+            ],
+          )
+        : Column(
+            children: [
+              Expanded(child: picture),
+              info,
+            ],
+          );
+  }
+
   void _showBigPicture(DrawingGuide g) {
     showDialog<void>(
       context: context,
@@ -606,6 +758,8 @@ class _DrawScreenState extends State<DrawScreen> {
 
   Future<void> _finishLesson(DrawingGuide g) async {
     final isNew = !_done.contains(g.name);
+    final next = lessonAfter(g);
+    final opensNext = next != null && isNew && !_done.contains(unlockAllKey);
     final today = _today;
     final isDaily = g.name == dailyGuide(today).name;
     setState(() {
@@ -613,7 +767,10 @@ class _DrawScreenState extends State<DrawScreen> {
       _done = {..._done, g.name, if (isDaily) dayKey(today)};
     });
     sound.play('fill.wav');
-    if (sound.enabled) speech.speak('Great job! You drew a ${g.name}!');
+    if (sound.enabled) {
+      speech.speak('Great job! You drew a ${g.name}!'
+          '${opensNext ? ' You opened the ${next.name}!' : ''}');
+    }
     try {
       await widget.progressStore?.saveDone(_done);
     } catch (_) {
@@ -645,6 +802,14 @@ class _DrawScreenState extends State<DrawScreen> {
               isNew ? 'New sticker ⭐' : 'Great job! ⭐',
               style: const TextStyle(fontSize: 20),
             ),
+            if (opensNext)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  '🔓 ${next.name} is open now',
+                  style: const TextStyle(fontSize: 20),
+                ),
+              ),
             if (isDaily) ...[
               const SizedBox(height: 8),
               const Text(
@@ -1068,20 +1233,93 @@ class _StampChoice extends StatelessWidget {
   }
 }
 
+/// One lesson on a track: a round picture of the finished drawing. Locked
+/// lessons are faded with a lock; finished ones get a star.
+class _LessonNode extends StatelessWidget {
+  const _LessonNode({
+    required this.guide,
+    required this.locked,
+    required this.done,
+    required this.onTap,
+  });
+
+  final DrawingGuide guide;
+  final bool locked;
+  final bool done;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: locked ? '${guide.name}, locked' : guide.name,
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox(
+          width: 96,
+          child: Column(
+            children: [
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 88,
+                    height: 88,
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: done ? Colors.amber : Colors.black26,
+                        width: 4,
+                      ),
+                    ),
+                    child: Opacity(
+                      opacity: locked ? 0.15 : 1,
+                      child: CustomPaint(
+                        painter:
+                            GuidePreviewPainter(guide, guide.steps.length - 1),
+                      ),
+                    ),
+                  ),
+                  if (locked) const Text('🔒', style: TextStyle(fontSize: 32)),
+                  if (done)
+                    const Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Text('⭐', style: TextStyle(fontSize: 24)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                guide.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: locked ? Colors.black38 : Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PageChoice extends StatelessWidget {
   const _PageChoice({
     required this.emoji,
     required this.label,
     required this.onTap,
-    this.done = false,
   });
 
   final String emoji;
   final String label;
   final VoidCallback onTap;
-
-  /// Shows a star: the child already finished this lesson.
-  final bool done;
 
   @override
   Widget build(BuildContext context) {
@@ -1123,12 +1361,6 @@ class _PageChoice extends StatelessWidget {
                   ),
                 ),
               ),
-              if (done)
-                const Positioned(
-                  top: 4,
-                  right: 6,
-                  child: Text('⭐', style: TextStyle(fontSize: 22)),
-                ),
             ],
           ),
         ),
