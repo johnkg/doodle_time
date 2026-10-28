@@ -11,6 +11,7 @@ import 'package:doodle_time/models.dart';
 import 'package:doodle_time/pages.dart';
 import 'package:doodle_time/parental_gate.dart';
 import 'package:doodle_time/speech_service.dart';
+import 'package:doodle_time/unlock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -253,6 +254,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sun'));
       await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('In the app'));
+      await tester.pumpAndSettle();
       final n = drawingGuides.firstWhere((g) => g.name == 'Sun').steps.length;
       expect(find.textContaining('step 1 of $n'), findsOneWidget);
       await tester.tap(find.textContaining('Next'));
@@ -311,6 +314,8 @@ void main() {
       expect(find.textContaining(RegExp('Draw an? ${g.name}')), findsOneWidget);
       await tester.tap(find.textContaining('Start'));
       await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('In the app'));
+      await tester.pumpAndSettle();
       expect(
         find.textContaining('step 1 of ${g.steps.length}'),
         findsOneWidget,
@@ -326,6 +331,8 @@ void main() {
         KidsDrawApp(progressStore: progress, now: () => now),
       );
       await tester.tap(find.textContaining('Start'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('In the app'));
       await tester.pumpAndSettle();
       for (int i = 0; i < g.steps.length - 1; i++) {
         await tester.tap(find.textContaining('Next'));
@@ -348,6 +355,8 @@ void main() {
       await tester.tap(find.text('Pictures'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sun'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('In the app'));
       await tester.pumpAndSettle();
       final n = drawingGuides.firstWhere((g) => g.name == 'Sun').steps.length;
       for (int i = 0; i < n - 1; i++) {
@@ -378,6 +387,8 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Sun'));
         await tester.pumpAndSettle();
+        await tester.tap(find.textContaining('In the app'));
+        await tester.pumpAndSettle();
         expect(find.textContaining('step 1 of'), findsOneWidget);
         expect(tester.getSize(find.byKey(const ValueKey('canvas'))).height,
             greaterThan(size.height * share));
@@ -397,6 +408,139 @@ void main() {
           expect(SpeechService.speakable(s.text), isNotEmpty, reason: s.text);
         }
       }
+    });
+  });
+
+  group('lesson unlock paths', () {
+    test('every lesson is in exactly one track', () {
+      final inTracks = [
+        for (final t in lessonTracks) ...t.guides.map((g) => g.name),
+      ];
+      expect(inTracks.length, drawingGuides.length);
+      expect(inTracks.toSet(), drawingGuides.map((g) => g.name).toSet());
+    });
+
+    test('first lesson is open, the next opens when it is finished', () {
+      final t = lessonTracks.first;
+      expect(isUnlocked(t, 0, {}), isTrue);
+      expect(isUnlocked(t, 1, {}), isFalse);
+      expect(isUnlocked(t, 1, {t.guides[0].name}), isTrue);
+      // Finishing a later lesson does not skip ahead.
+      expect(isUnlocked(t, 2, {t.guides[0].name}), isFalse);
+    });
+
+    test('unlock all opens every lesson', () {
+      for (final t in lessonTracks) {
+        for (int i = 0; i < t.guides.length; i++) {
+          expect(isUnlocked(t, i, {unlockAllKey}), isTrue);
+        }
+      }
+    });
+
+    test('lessonAfter and lessonBefore follow the track order', () {
+      final t = lessonTracks.first;
+      expect(lessonAfter(t.guides[0])?.name, t.guides[1].name);
+      expect(lessonAfter(t.guides.last), isNull);
+      expect(lessonBefore(t, 0), isNull);
+      expect(lessonBefore(t, 1)?.name, t.guides[0].name);
+    });
+
+    testWidgets('a locked lesson says which one opens it', (tester) async {
+      final t = lessonTracks.first;
+      await tester.pumpWidget(const KidsDrawApp());
+      await tester.tap(find.text('Pictures'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(t.guides[1].name));
+      await tester.pump();
+      expect(find.textContaining('Draw the ${t.guides[0].name} first'),
+          findsOneWidget);
+      expect(find.textContaining('On paper'), findsNothing);
+    });
+
+    testWidgets('finished lesson opens the next one', (tester) async {
+      final t = lessonTracks.first;
+      final progress = MemoryProgress()..done = {t.guides[0].name};
+      await tester.pumpWidget(KidsDrawApp(progressStore: progress));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pictures'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(t.guides[1].name));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('On paper'), findsOneWidget);
+      expect(find.textContaining('In the app'), findsOneWidget);
+    });
+
+    testWidgets('grown-ups can unlock all lessons', (tester) async {
+      final progress = MemoryProgress();
+      await tester.pumpWidget(KidsDrawApp(progressStore: progress));
+      await tester.tap(find.text('Grown-ups'));
+      await tester.pumpAndSettle();
+      final question =
+          (tester.widget(find.textContaining('What is')) as Text).data!;
+      final nums =
+          RegExp(r'\d+').allMatches(question).map((m) => int.parse(m[0]!));
+      await tester.tap(find.text('${nums.reduce((a, b) => a + b)}'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Unlock all lessons'));
+      await tester.pumpAndSettle();
+      expect(progress.done, contains(unlockAllKey));
+    });
+  });
+
+  group('draw on paper', () {
+    Future<void> startSun(WidgetTester tester, String mode) async {
+      await tester.pumpWidget(const KidsDrawApp());
+      await tester.tap(find.text('Pictures'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sun'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining(mode));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('paper mode shows the lesson with no canvas', (tester) async {
+      await startSun(tester, 'On paper');
+      final n = drawingGuides.firstWhere((g) => g.name == 'Sun').steps.length;
+      expect(find.byKey(const ValueKey('canvas')), findsNothing);
+      expect(find.textContaining('Get a pencil and a paper'), findsOneWidget);
+      expect(find.textContaining('step 1 of $n'), findsOneWidget);
+      await tester.tap(find.textContaining('Next'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('step 2 of $n'), findsOneWidget);
+      expect(find.textContaining('Get a pencil and a paper'), findsNothing);
+    });
+
+    testWidgets('can switch between paper and the app mid-lesson',
+        (tester) async {
+      await startSun(tester, 'On paper');
+      await tester.tap(find.byTooltip('Draw in the app'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('canvas')), findsOneWidget);
+      expect(find.textContaining('step 1 of'), findsOneWidget);
+      await tester.tap(find.byTooltip('Draw on paper'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('canvas')), findsNothing);
+    });
+
+    testWidgets('finishing a lesson on paper gives the sticker',
+        (tester) async {
+      final progress = MemoryProgress();
+      await tester.pumpWidget(KidsDrawApp(progressStore: progress));
+      await tester.tap(find.text('Pictures'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sun'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('On paper'));
+      await tester.pumpAndSettle();
+      final n = drawingGuides.firstWhere((g) => g.name == 'Sun').steps.length;
+      for (int i = 0; i < n - 1; i++) {
+        await tester.tap(find.textContaining('Next'));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.textContaining('Done'));
+      await tester.pumpAndSettle();
+      expect(progress.done, contains('Sun'));
+      expect(find.textContaining('Moon is open now'), findsOneWidget);
     });
   });
 
