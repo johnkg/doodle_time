@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -97,16 +98,38 @@ class _DrawScreenState extends State<DrawScreen> {
       body: SafeArea(
         child: ListenableBuilder(
           listenable: c,
-          builder: (context, _) => Column(
-            children: [
-              _topBar(),
-              if (_guide != null)
-                _guidePanel()
-              else if (_showDaily)
-                _dailyBanner(),
-              Expanded(child: _canvas()),
-              _bottomPanel(),
-            ],
+          builder: (context, _) => LayoutBuilder(
+            builder: (context, box) {
+              final screen = box.biggest;
+              // Wide landscape: lesson goes in a column beside the canvas.
+              final wide =
+                  screen.width >= 900 && screen.width >= screen.height * 1.2;
+              final sideLesson = _guide != null && wide;
+              return Column(
+                children: [
+                  _topBar(),
+                  if (_guide != null && !wide)
+                    _guidePanel(screen)
+                  else if (_guide == null && _showDaily)
+                    _dailyBanner(),
+                  Expanded(
+                    child: sideLesson
+                        ? Row(
+                            children: [
+                              SizedBox(
+                                width:
+                                    (screen.width * 0.27).clamp(280.0, 360.0),
+                                child: _guideSidePanel(),
+                              ),
+                              Expanded(child: _canvas()),
+                            ],
+                          )
+                        : _canvas(),
+                  ),
+                  _bottomPanel(),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -396,111 +419,156 @@ class _DrawScreenState extends State<DrawScreen> {
 
   // ---- step-by-step guide ---------------------------------------------------
 
-  Widget _guidePanel() {
-    final g = _guide!;
-    final step = g.steps[_step];
+  /// Lesson picture; tap it to see it full size.
+  Widget _guidePicture(DrawingGuide g) => GestureDetector(
+        onTap: () => _showBigPicture(g),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFDF7),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.black12, width: 2),
+          ),
+          child: CustomPaint(painter: GuidePreviewPainter(g, _step)),
+        ),
+      );
+
+  /// Step label with the "hear it" and "close" buttons.
+  Widget _guideHeader(DrawingGuide g) {
+    const tight = BoxConstraints.tightFor(width: 40, height: 40);
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            '${g.emoji} ${g.name} · step ${_step + 1} of ${g.steps.length}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: Colors.black54,
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Hear the step',
+          constraints: tight,
+          padding: EdgeInsets.zero,
+          icon: const Icon(Icons.volume_up),
+          onPressed: () => speech.speak(g.steps[_step].text),
+        ),
+        IconButton(
+          tooltip: 'Close lesson',
+          constraints: tight,
+          padding: EdgeInsets.zero,
+          icon: const Icon(Icons.close),
+          onPressed: () => setState(() => _guide = null),
+        ),
+      ],
+    );
+  }
+
+  Widget _guideText(DrawingGuide g, double fontSize) => Text(
+        g.steps[_step].text,
+        style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
+      );
+
+  /// Back and Next (or Done) buttons.
+  Widget _guideButtons(DrawingGuide g) {
     final isLast = _step == g.steps.length - 1;
-    final side = (MediaQuery.sizeOf(context).width * 0.36).clamp(112.0, 240.0);
+    return Row(
+      children: [
+        if (_step > 0) ...[
+          Expanded(
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+              onPressed: () {
+                setState(() => _step--);
+                _speakStep();
+              },
+              child: const Text('⬅️ Back', style: TextStyle(fontSize: 18)),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+            onPressed: _nextStep,
+            child: Text(isLast ? 'Done 🎉' : 'Next ➡️',
+                style: const TextStyle(fontSize: 18)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  BoxDecoration get _guideBox => BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.black12, width: 2),
+      );
+
+  /// Lesson panel above the canvas (phones and portrait). The picture is sized
+  /// by height as well as width so the canvas keeps most of the screen.
+  Widget _guidePanel(Size screen) {
+    final g = _guide!;
+    final side =
+        math.min(screen.width * 0.26, screen.height * 0.14).clamp(80.0, 150.0);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
       child: Container(
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.black12, width: 2),
-        ),
-        child: Row(
+        decoration: _guideBox,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // The sketches are detailed, so the picture grows with the
-            // screen; tap it to see it full size.
-            GestureDetector(
-              onTap: () => _showBigPicture(g),
-              child: Container(
-                width: side,
-                height: side,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFFDF7),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.black12, width: 2),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: side, height: side, child: _guidePicture(g)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _guideHeader(g),
+                      _guideText(g, 18),
+                    ],
+                  ),
                 ),
-                child: CustomPaint(painter: GuidePreviewPainter(g, _step)),
-              ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${g.emoji} ${g.name} · step ${_step + 1} of ${g.steps.length}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black54,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Hear the step',
-                        icon: const Icon(Icons.volume_up),
-                        onPressed: () => speech.speak(step.text),
-                      ),
-                      IconButton(
-                        tooltip: 'Close lesson',
-                        icon: const Icon(Icons.close),
-                        onPressed: () => setState(() => _guide = null),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    step.text,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      if (_step > 0) ...[
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 52),
-                            ),
-                            onPressed: () {
-                              setState(() => _step--);
-                              _speakStep();
-                            },
-                            child: const Text('⬅️ Back',
-                                style: TextStyle(fontSize: 18)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      Expanded(
-                        child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(0, 52),
-                          ),
-                          onPressed: _nextStep,
-                          child: Text(isLast ? 'Done 🎉' : 'Next ➡️',
-                              style: const TextStyle(fontSize: 18)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: 8),
+            _guideButtons(g),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Lesson panel as a column left of the canvas (wide landscape screens), so
+  /// the canvas keeps its full height and the picture can be big.
+  Widget _guideSidePanel() {
+    final g = _guide!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 0, 6),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: _guideBox,
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              AspectRatio(aspectRatio: 1, child: _guidePicture(g)),
+              const SizedBox(height: 10),
+              _guideHeader(g),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _guideText(g, 22),
+              ),
+              const SizedBox(height: 8),
+              _guideButtons(g),
+            ],
+          ),
         ),
       ),
     );
@@ -604,6 +672,7 @@ class _DrawScreenState extends State<DrawScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: DecoratedBox(
+        key: const ValueKey('canvas'),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
