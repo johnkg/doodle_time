@@ -24,24 +24,12 @@ enum GuideKind {
 
 /// One shape of a "how to draw" lesson, in a 100 x 100 design space.
 class GuideShape {
-  GuideShape(this.path,
-      {bool fill = false, GuideKind? kind, this.tone, this.toneDepth = 1})
+  GuideShape(this.path, {bool fill = false, GuideKind? kind})
       : kind = kind ?? (fill ? GuideKind.dot : GuideKind.line);
   final Path path;
   final GuideKind kind;
 
-  /// For hatching: the area it covers. The painter lays soft graphite tone
-  /// under the strokes so shading reads as a gradient, not just lines.
-  final Path? tone;
-
-  /// How dark the tone is (cross-hatching is darker).
-  final double toneDepth;
-
   bool get fill => kind == GuideKind.dot || kind == GuideKind.shine;
-
-  /// The same shape moved or scaled by [m] (a column-major 4x4 matrix).
-  GuideShape transformed(Matrix4 m) => GuideShape(path.transform(m.storage),
-      kind: kind, tone: tone?.transform(m.storage), toneDepth: toneDepth);
 }
 
 class GuideStep {
@@ -183,15 +171,11 @@ GuideShape _helpLine(List<Offset> pts) =>
 GuideShape _shine(double cx, double cy, double r) =>
     GuideShape(circlePath(cx, cy, r), kind: GuideKind.shine);
 
-/// A lifelike eye: shaded iris with a ring around it, a dark pupil, and a
-/// bright highlight (plus a small second one) so it looks wet and alive.
+/// Big shiny cartoon eye: a dark ball with two white sparkles.
 List<GuideShape> _eye(double cx, double cy, double r) => [
-      _circle(cx, cy, r),
-      _hatch(_minus(circlePath(cx, cy, r), circlePath(cx, cy, r * 0.5)),
-          angle: 0.9, gap: math.max(0.3, r * 0.22), seed: 5),
-      _dot(cx, cy, r * 0.52),
-      _shine(cx + r * 0.3, cy - r * 0.3, r * 0.26),
-      _shine(cx - r * 0.3, cy + r * 0.38, r * 0.1),
+      _dot(cx, cy, r),
+      _shine(cx + r * 0.3, cy - r * 0.35, r * 0.38),
+      _shine(cx - r * 0.35, cy + r * 0.4, r * 0.16),
     ];
 
 /// One thin pencil stroke (fur, a crease, a blush mark).
@@ -219,8 +203,7 @@ GuideShape _hatch(Path area,
     out.addPath(
         _hatchPath(area, angle + 0.9, gap * 1.3, seed + 7), Offset.zero);
   }
-  return GuideShape(out,
-      kind: GuideKind.shade, tone: area, toneDepth: cross ? 1.8 : 1);
+  return GuideShape(out, kind: GuideKind.shade);
 }
 
 Path _hatchPath(Path area, double angle, double gap, int seed) {
@@ -321,41 +304,36 @@ GuideShape _fluffy(List<Offset> pts,
   return GuideShape(out);
 }
 
-/// Irregular, closely packed patches over [area] like a giraffe's coat: a
-/// slightly jittered hex lattice (rows along [angle]) of rough polygons, each
-/// a bit smaller than its cell so thin pale gaps stay between them. Patches
-/// that would cross the edge of [area] are left out.
-GuideShape _patchGrid(Path area,
-    {double spacing = 10, double r = 4.4, double angle = 0, int seed = 1}) {
-  final rnd = math.Random(seed);
+/// Little round spots (scales) inside [area] that don't touch each other.
+/// [patchy] makes lumpy patches instead of ovals (a giraffe's coat).
+GuideShape _spots(Path area, int count, double r,
+    {int seed = 1, bool patchy = false}) {
   final b = area.getBounds();
-  final c = b.center;
-  final u = Offset(math.cos(angle), math.sin(angle));
-  final v = Offset(-u.dy, u.dx);
-  final reach = b.longestSide;
+  final rnd = math.Random(seed);
+  final placed = <Offset>[];
   final out = Path();
-  final rows = (reach / (spacing * 0.866)).ceil();
-  for (int j = -rows; j <= rows; j++) {
-    for (int i = -rows; i <= rows; i++) {
-      final off = (j.isOdd ? 0.5 : 0.0);
-      final p = c +
-          u *
-              ((i + off) * spacing +
-                  (rnd.nextDouble() - 0.5) * spacing * 0.14) +
-          v * (j * spacing * 0.866 + (rnd.nextDouble() - 0.5) * spacing * 0.14);
-      final size = r * (0.85 + rnd.nextDouble() * 0.3);
-      final sides = 6 + rnd.nextInt(2);
-      final pts = [
-        for (int k = 0; k < sides; k++)
-          p +
-              Offset.fromDirection(
-                k * 2 * math.pi / sides + rnd.nextDouble() * 0.5,
-                size * (0.8 + rnd.nextDouble() * 0.3),
-              ),
-      ];
-      final core = [p, for (final q in pts) p + (q - p) * 0.75];
-      if (core.every(area.contains)) out.addPolygon(pts, true);
-    }
+  for (int tries = 0; placed.length < count && tries < 2000; tries++) {
+    final p = Offset(b.left + rnd.nextDouble() * b.width,
+        b.top + rnd.nextDouble() * b.height);
+    final size = r * (0.75 + rnd.nextDouble() * 0.5);
+    final fits = [
+      for (int i = 0; i < 8; i++)
+        p + Offset.fromDirection(i * math.pi / 4, size + 0.8)
+    ].every(area.contains);
+    if (!fits || placed.any((q) => (q - p).distance < r * 2.6)) continue;
+    placed.add(p);
+    out.addPath(
+        patchy
+            ? blobPath([
+                for (int i = 0; i < 6; i++)
+                  p +
+                      Offset.fromDirection(
+                          i * math.pi / 3 + rnd.nextDouble() * 0.5,
+                          size * (0.75 + rnd.nextDouble() * 0.35)),
+              ])
+            : ellipsePath(p.dx, p.dy, size, size * 0.8,
+                angle: rnd.nextDouble() * 3),
+        Offset.zero);
   }
   return GuideShape(out);
 }
@@ -1446,8 +1424,11 @@ DrawingGuide _car() {
 }
 
 /// Same shape flipped left to right (for wings, ears, legs).
-GuideShape _flip(GuideShape s) => s.transformed(
-    Matrix4.translationValues(100, 0, 0) * Matrix4.diagonal3Values(-1, 1, 1));
+GuideShape _flip(GuideShape s) => GuideShape(
+    s.path.transform((Matrix4.translationValues(100, 0, 0) *
+            Matrix4.diagonal3Values(-1, 1, 1))
+        .storage),
+    kind: s.kind);
 
 /// Tapered curly arm along [center], [w] wide at the start. Open at the base.
 GuideShape _tentacle(List<Offset> center, double w) {
@@ -1584,7 +1565,8 @@ DrawingGuide _rocket() {
       Matrix4.rotationZ(0.3) *
       Matrix4.translationValues(-pivot.dx, -pivot.dy, 0);
   List<GuideShape> tilt(List<GuideShape> shapes) => [
-        for (final s in shapes) s.transformed(m),
+        for (final s in shapes)
+          GuideShape(s.path.transform(m.storage), kind: s.kind),
       ];
   final planet = circlePath(80, 20, 8);
   return _sketch(
@@ -2053,153 +2035,144 @@ DrawingGuide _bird() {
 }
 
 DrawingGuide _turtle() {
-  // Seen from above, head up. The shell is an oval; its edge is the one place
-  // every other part (head, flippers, tail) starts and ends.
-  const cx = 50.0, cy = 52.0, rx = 21.0, ry = 27.0;
-  const rix = 17.0, riy = 23.0; // the ring of edge plates ends here
-  Offset shell(double y, {bool left = true, double r = 1}) {
-    final k = math.sqrt(math.max(0, 1 - math.pow((y - cy) / (ry * r), 2)));
-    return Offset(cx + (left ? -1 : 1) * rx * r * k, y);
-  }
-
-  Offset ring(double y, {bool left = true}) {
-    final k = math.sqrt(math.max(0, 1 - math.pow((y - cy) / riy, 2)));
-    return Offset(cx + (left ? -1 : 1) * rix * k, y);
-  }
-
-  // Central row of five plates; neighbours share their top/bottom edge.
-  const ys = [28.5, 38.5, 48.5, 58.5, 67.5, 74.5];
-  const junction = [4.2, 5.4, 5.6, 5.0, 3.8, 2.2]; // half width at each level
-  const middle = [7.0, 8.2, 7.8, 6.6, 4.6]; // half width mid plate
-  Path vertebral(int i) => polyPath([
-        Offset(cx - junction[i], ys[i]),
-        Offset(cx + junction[i], ys[i]),
-        Offset(cx + middle[i], (ys[i] + ys[i + 1]) / 2),
-        Offset(cx + junction[i + 1], ys[i + 1]),
-        Offset(cx - junction[i + 1], ys[i + 1]),
-        Offset(cx - middle[i], (ys[i] + ys[i + 1]) / 2),
-      ]);
-  // Side plates sit between the central row and the edge ring; lines from the
-  // central row's corners run out and slightly back to the ring.
-  Offset ringAt(int i, bool left) => ring(ys[i] + 3, left: left);
-  Path costal(int i, bool left) {
-    final s = left ? -1.0 : 1.0;
-    final top = Offset(cx + s * junction[i], ys[i]);
-    final mid = Offset(cx + s * middle[i], (ys[i] + ys[i + 1]) / 2);
-    final bottom = Offset(cx + s * junction[i + 1], ys[i + 1]);
-    final b0 = ringAt(i, left);
-    final b1 = i == 4 ? ring(ys[5] - 1, left: left) : ringAt(i + 1, left);
-    final edge = [
-      for (int k = 1; k < 4; k++)
-        ring(b1.dy + (b0.dy - b1.dy) * k / 4, left: left),
+  // Shell: the top half of an oval, a flatter curve underneath, and a band
+  // along the bottom edge. All three meet at the two corners.
+  const cx = 58.25, cy = 51.0, rx = 30.25;
+  double u(double x) => (x - cx) / rx;
+  double dome(double x) => cy - 25 * math.sqrt(math.max(0, 1 - u(x) * u(x)));
+  double under(double x) => cy + 7.6 * (1 - u(x) * u(x));
+  double band(double x) => cy + 4.4 * (1 - u(x) * u(x));
+  // Arch inside the shell for the big middle shapes; it ends on the band.
+  double arch(double x) =>
+      53.1 - 19 * math.sqrt(math.max(0, 1 - math.pow((x - cx) / 22, 2)));
+  List<Offset> curve(double Function(double) f, double from, double to) => [
+        for (int i = 0; i <= 40; i++)
+          Offset(from + (to - from) * i / 40, f(from + (to - from) * i / 40)),
+      ];
+  final shell = Path()
+    ..addPolygon([...curve(dome, 28, 88.5), ...curve(under, 88.5, 28)], true);
+  const head = [
+    Offset(29.6, 43.6),
+    Offset(24, 38.6),
+    Offset(16, 36.8),
+    Offset(9.6, 40),
+    Offset(7.6, 46),
+    Offset(9.6, 51.6),
+    Offset(16, 54.6),
+    Offset(24, 54.8),
+    Offset(30.6, 52.3),
+  ];
+  final front = [
+    Offset(36, under(36)),
+    const Offset(35, 63),
+    const Offset(39, 74),
+    const Offset(47, 83.5),
+    const Offset(55, 88),
+    const Offset(58, 84),
+    const Offset(54, 72),
+    Offset(46, under(46)),
+  ];
+  final far = [
+    Offset(31, under(31)),
+    const Offset(25.5, 59),
+    const Offset(22, 67),
+    const Offset(24, 70),
+    const Offset(29.5, 64),
+    Offset(34, under(34)),
+  ];
+  final back = [
+    Offset(74, under(74)),
+    const Offset(79, 63),
+    const Offset(87, 66),
+    const Offset(92, 64),
+    const Offset(88.5, 58),
+    Offset(83, under(83)),
+  ];
+  // One rounded plate between two curves, a little smaller than its cell.
+  Path plate(double Function(double) top, double t0, double t1,
+      double Function(double) bottom, double b0, double b1) {
+    final pts = [
+      for (final t in [0.0, 0.5, 1.0])
+        Offset(t0 + (t1 - t0) * t, top(t0 + (t1 - t0) * t)),
+      for (final t in [1.0, 0.5, 0.0])
+        Offset(b0 + (b1 - b0) * t, bottom(b0 + (b1 - b0) * t)),
     ];
-    return polyPath([top, mid, bottom, b1, ...edge, b0]);
+    final c = pts.reduce((a, b) => a + b) / pts.length.toDouble();
+    return blobPath([for (final p in pts) c + (p - c) * 0.8]);
   }
 
+  const archTop = [36.25, 47.0, 58.25, 69.5, 80.25];
+  const domeTop = [30.0, 44.75, 58.25, 71.75, 86.5];
+  const archMid = [36.25, 42.0, 52.0, 64.5, 74.5, 80.25];
+  final bandMid = [for (final x in archMid) cx + (x - cx) * 1.1];
   final plates = [
-    for (int i = 0; i < 5; i++) vertebral(i),
-    for (int i = 0; i < 5; i++) ...[costal(i, true), costal(i, false)],
+    for (int i = 0; i < 4; i++)
+      plate(dome, domeTop[i], domeTop[i + 1], arch, archTop[i], archTop[i + 1]),
+    for (int i = 1; i < 4; i++)
+      plate(arch, archMid[i], archMid[i + 1], band, bandMid[i], bandMid[i + 1]),
   ];
-  final shellArea = ellipsePath(cx, cy, rx, ry);
-  final edgeBand = _minus(shellArea, ellipsePath(cx, cy, rix, riy));
-
-  final headL = shell(26.4, left: true, r: 1);
-  final headR = shell(26.4, left: false, r: 1);
-  final head = [
-    headL,
-    const Offset(42.4, 20.5),
-    const Offset(44.4, 14.2),
-    const Offset(50, 11.4),
-    const Offset(55.6, 14.2),
-    const Offset(57.6, 20.5),
-    headR,
-  ];
-  final headArea = blobPath(head);
-
-  List<Offset> flipper(double y0, double y1, List<Offset> through) =>
-      [shell(y0), ...through, shell(y1)];
-  final frontL = flipper(37, 47.5, const [
-    Offset(24, 32.6),
-    Offset(14.5, 30.4),
-    Offset(5.4, 33.6),
-    Offset(8.4, 39.6),
-    Offset(17.4, 44.6),
-  ]);
-  final hindL = flipper(66, 72.5, const [
-    Offset(30.6, 72),
-    Offset(26.6, 78),
-    Offset(29.4, 81),
-    Offset(35, 78),
-  ]);
-  GuideShape mirrored(List<Offset> pts) => _flip(_smooth(pts));
-  final tail = _smooth([
-    shell(78.6, left: true),
-    const Offset(50, 85),
-    shell(78.6, left: false)
-  ]);
-
-  Path flipperArea(List<Offset> pts) => blobPath(pts);
-
   return DrawingGuide('Turtle', '🐢', [
-    GuideStep(
-        'Draw a tall oval, a line down the middle and a little circle on top ⭕',
-        [
-          _helpOval(cx, cy, rx, ry),
-          _helpLine(const [Offset(50, 8), Offset(50, 88)]),
-          _helpCircle(50, 18, 8.4),
-        ]),
-    GuideStep('Draw over the oval for the shell 🐢', [GuideShape(shellArea)]),
-    GuideStep('Draw the head with eyes and a smile 👀', [
+    GuideStep('Draw a big oval and a small circle for the head ⭕', [
+      _helpOval(cx, cy, rx, 25),
+      _helpCircle(17, 46, 9),
+    ]),
+    GuideStep('Draw over the top of the oval and a curve under it 🐢', [
+      GuideShape(polyPath(curve(dome, 28, 88.5), close: false)),
+      GuideShape(polyPath(curve(under, 28, 88.5), close: false)),
+    ]),
+    GuideStep('Draw the head with a big shiny eye 👀', [
       _smooth(head),
-      ..._eye(46, 17, 1.7),
-      ..._eye(54, 17, 1.7),
-      _dot(48.9, 21.2, 0.35),
-      _dot(51.1, 21.2, 0.35),
-      _smooth(const [Offset(46.6, 23.4), Offset(50, 24.8), Offset(53.4, 23.4)]),
+      _oval(17, 43.6, 3.8, 3.9),
+      _dot(17.4, 44, 2.8),
+      _shine(18.4, 42.9, 0.95),
+      _shine(16.5, 45.2, 0.4),
+      _smooth(const [Offset(8.6, 49.6), Offset(13, 51.6), Offset(18.6, 51)]),
+      _dot(9.2, 43.6, 0.5),
     ]),
-    GuideStep('Draw four flippers and a tiny tail 🌊', [
-      _smooth(frontL),
-      mirrored(frontL),
-      _smooth(hindL),
-      mirrored(hindL),
-      tail,
+    GuideStep('Draw three flippers and a tiny tail 🌊', [
+      _smooth(front),
+      _smooth(far),
+      _smooth(back),
+      _line([
+        const Offset(88.5, 51),
+        const Offset(93, 53.4),
+        Offset(87.4, under(87.4))
+      ]),
     ]),
-    GuideStep('Draw a smaller oval inside and little lines around the edge ➖', [
-      GuideShape(ellipsePath(cx, cy, rix, riy)),
-      for (int i = 0; i < 22; i++)
-        if (i != 0 && i != 11)
-          _line([
-            _on(cx, cy, rix, riy, i * 2 * math.pi / 22 + 0.14),
-            _on(cx, cy, rx, ry, i * 2 * math.pi / 22 + 0.14),
-          ]),
+    GuideStep('Draw a band along the bottom of the shell ➖', [
+      GuideShape(polyPath(curve(band, 28, 88.5), close: false)),
+      for (double x = 33; x < 86; x += 6)
+        _line([Offset(x, band(x)), Offset(x + 0.6, under(x + 0.6))]),
     ]),
-    GuideStep('Draw five plates down the middle 🔶', [
-      for (int i = 0; i < 5; i++) GuideShape(vertebral(i)),
+    GuideStep('Draw big round plates on the shell 🔷', [
+      for (final p in plates) GuideShape(p),
     ]),
-    GuideStep('Draw the plates on both sides 🔷', [
-      for (int i = 0; i < 5; i++) ...[
-        GuideShape(costal(i, true)),
-        GuideShape(costal(i, false)),
-      ],
+    GuideStep('Add little spots on the flippers and head 🟤', [
+      _spots(blobPath(front), 9, 1.5, seed: 1),
+      _spots(blobPath(far), 4, 1.2, seed: 2),
+      _spots(blobPath(back), 4, 1.2, seed: 3),
+      _spots(
+          Path.combine(PathOperation.intersect, blobPath(head),
+              _minus(rectPath(20, 36, 30, 50), circlePath(17, 43.6, 5.4))),
+          3,
+          1,
+          seed: 4),
     ]),
-    GuideStep('Rub out the helper lines, add scales and shade the shell ✏️', [
+    GuideStep('Shade the shell and add water swirls ✏️', [
       for (int i = 0; i < plates.length; i++)
-        _hatch(plates[i],
-            angle: 1.1 + (i % 3) * 0.12,
-            gap: 1.25,
-            seed: i,
-            cross: i < 5 && i % 2 == 0),
-      _hatch(edgeBand, angle: 0.5, gap: 1.7, seed: 20),
-      for (final (i, f) in [frontL, hindL].indexed) ...[
-        _hatch(flipperArea(f), angle: 0.7, gap: 1.6, seed: 30 + i),
-        _hatch(_mirror(flipperArea(f)), angle: 2.4, gap: 1.6, seed: 40 + i),
-      ],
-      _hatch(_minus(headArea, headArea.shift(const Offset(2, 3))),
-          angle: 1.1, gap: 0.8, seed: 8),
-      _fine(const [Offset(8, 66), Offset(13, 70), Offset(12, 76)]),
-      _fine(const [Offset(92, 66), Offset(87, 70), Offset(88, 76)]),
-      _fine(const [Offset(20, 90), Offset(30, 92), Offset(40, 91)]),
-      _fine(const [Offset(60, 91), Offset(70, 92), Offset(80, 90)]),
+        _hatch(plates[i], angle: 1.1, gap: 1.1, seed: i),
+      _hatch(
+          _minus(shell,
+              plates.reduce((a, b) => Path.combine(PathOperation.union, a, b))),
+          angle: 0.4,
+          gap: 2.2,
+          seed: 9),
+      _fine(const [Offset(60, 88), Offset(66, 90), Offset(73, 89)]),
+      _fine(const [Offset(64, 92.5), Offset(70, 94), Offset(76, 93)]),
+      _fine(const [Offset(14, 66), Offset(18, 70), Offset(17, 75)]),
+      _fine(const [Offset(92, 46), Offset(96, 49)]),
+      _fine(const [Offset(90, 70), Offset(95, 71.5)]),
+      _fine(const [Offset(22, 28), Offset(28, 25)]),
     ]),
   ]);
 }
@@ -2881,119 +2854,151 @@ DrawingGuide _penguin() {
 }
 
 DrawingGuide _giraffe() {
-  // A portrait: long spotted neck coming up from the bottom, head turned to
-  // the right. The neck lines and the head line meet at the back of the head
-  // and at the throat.
-  const backNeck = [
-    Offset(40, 33),
-    Offset(37, 43),
-    Offset(33, 56),
-    Offset(29, 70),
-    Offset(24, 86),
-    Offset(19.4, 99),
+  // The head is drawn small, then grown around its horns so it stays cute.
+  const pivot = Offset(76, 8);
+  const grow = 1.15;
+  Offset hp(Offset p) => pivot + (p - pivot) * grow;
+  final headMatrix = Matrix4.translationValues(pivot.dx, pivot.dy, 0) *
+      Matrix4.diagonal3Values(grow, grow, 1) *
+      Matrix4.translationValues(-pivot.dx, -pivot.dy, 0);
+  List<GuideShape> head(List<GuideShape> shapes) => [
+        for (final s in shapes)
+          GuideShape(s.path.transform(headMatrix.storage), kind: s.kind),
+      ];
+  final backNeck = [
+    hp(const Offset(63.5, 24.5)),
+    const Offset(60.5, 37),
+    const Offset(56.5, 46),
+    const Offset(53, 51),
   ];
-  const headLine = [
-    Offset(40, 33),
-    Offset(43, 24),
-    Offset(48, 17.4),
-    Offset(54, 16),
-    Offset(62, 18.2),
-    Offset(70, 21.4),
-    Offset(78, 24),
-    Offset(85, 28),
-    Offset(90.4, 32.6),
-    Offset(92.4, 38),
-    Offset(89.6, 43.4),
-    Offset(83, 45.8),
-    Offset(76, 45.6),
-    Offset(70, 46.6),
-    Offset(65, 50),
+  final frontNeck = [
+    hp(const Offset(76, 29)),
+    const Offset(73, 41),
+    const Offset(69.5, 50),
+    const Offset(68, 58),
   ];
-
-  const frontNeck = [
-    Offset(65, 50),
-    Offset(62.6, 58),
-    Offset(61, 67),
-    Offset(61, 77),
-    Offset(63, 88),
-    Offset(65.6, 99),
+  const bodyLine = [
+    Offset(53, 51),
+    Offset(44, 51.4),
+    Offset(32, 53),
+    Offset(23, 57.5),
+    Offset(19.5, 64),
+    Offset(22, 70.5),
+    Offset(30, 73.5),
+    Offset(42, 74.6),
+    Offset(56, 74.2),
+    Offset(65, 71.5),
+    Offset(69.2, 65),
+    Offset(68, 58),
   ];
-
-  final silhouette = blobPath([
-    ...backNeck.reversed,
-    ...headLine.skip(1),
-    ...frontNeck.skip(1),
-  ]);
-  // Patches cover the neck and the back of the head, not the face.
+  const headPts = [
+    Offset(62.5, 19),
+    Offset(65.5, 13),
+    Offset(72, 10.6),
+    Offset(79, 13),
+    Offset(84.5, 18.4),
+    Offset(88, 23.6),
+    Offset(86.6, 28.4),
+    Offset(80.6, 30),
+    Offset(73.4, 29.4),
+    Offset(66.6, 26),
+  ];
+  final headArea = blobPath([for (final p in headPts) hp(p)]);
+  final body = blobPath(bodyLine);
+  final neck = blobPath([...backNeck, ...frontNeck.reversed]);
   final coat = _minus(
-      _minus(silhouette, rectPath(71, 0, 100, 100)), circlePath(62, 25, 7.5));
-  final patches = _patchGrid(coat, spacing: 9.2, r: 4.6, angle: -1.18, seed: 4);
+      Path.combine(PathOperation.union, body, neck), rectPath(40, 0, 100, 41));
+  final patches = _spots(coat, 20, 3.1, seed: 11, patchy: true);
   final back = smoothPath(backNeck).computeMetrics().first;
-  // Kept inside the picture: the smooth outline bulges a little past the
-  // bottom edge.
-  final throat = Path.combine(
-      PathOperation.intersect,
-      _minus(silhouette, silhouette.shift(const Offset(-5, -4))),
-      rectPath(0, 0, 100, 99));
-
-  GuideShape mane(double t) {
+  // Legs hang from the belly; the lower leg is a little thinner.
+  const legs = <(double, double)>[
+    (25.5, 71.6),
+    (33, 73.6),
+    (50, 74.5),
+    (58, 73.8)
+  ];
+  List<GuideShape> leg(double x, double top) => [
+        _smooth([Offset(x, top), Offset(x - 0.4, 82), Offset(x + 0.2, 91)]),
+        _smooth([
+          Offset(x + 4.4, top + 0.4),
+          Offset(x + 4.8, 82),
+          Offset(x + 3.9, 91)
+        ]),
+        _round(x - 0.3, 91, x + 4.4, 94.2, 1.2),
+      ];
+  GuideShape tuft(double t) {
     final p = back.getTangentForOffset(back.length * t)!.position;
     return GuideShape(Path()
       ..moveTo(p.dx, p.dy)
-      ..quadraticBezierTo(p.dx - 1.5, p.dy - 2.4, p.dx - 4.4, p.dy - 2.4));
+      ..quadraticBezierTo(p.dx - 1.2, p.dy - 2.6, p.dx - 3.8, p.dy - 2.4));
   }
 
   return DrawingGuide('Giraffe', '🦒', [
     GuideStep(
-        'Draw a long slanted neck with two lines and an oval for the head 🥚', [
-      _helpOval(66, 29, 27, 14, angle: 0.28),
-      _helpLine(const [Offset(24, 100), Offset(36, 52), Offset(50, 24)]),
-      _helpLine(const [Offset(60, 100), Offset(60, 66), Offset(66, 44)]),
-    ]),
-    GuideStep('Draw the head with a long, soft nose 🦒', [_smooth(headLine)]),
-    GuideStep('Draw the neck down from the head ⬇️', [
+        'Draw a big oval for the body, a circle for the head and a slanted line for the neck 🥚',
+        [
+          _helpOval(44, 63, 25, 12.5),
+          ...head([_helpOval(74.5, 20.5, 12.5, 9.5, angle: 0.25)]),
+          _helpLine([const Offset(54, 54), hp(const Offset(66, 20))]),
+        ]),
+    GuideStep(
+        'Draw a head with a long, round nose 🦒',
+        head([
+          GuideShape(blobPath(headPts)),
+          _smooth(const [Offset(66.6, 26), Offset(72, 28), Offset(80, 28.8)]),
+        ])),
+    GuideStep(
+        'Add two little horns with balls on top and an ear 👂',
+        head([
+          _line(const [Offset(69, 11.4), Offset(68, 5.6)]),
+          _circle(67.8, 4.2, 1.6),
+          _line(const [Offset(74.6, 10.8), Offset(75.2, 5)]),
+          _circle(75.3, 3.6, 1.6),
+          _leaf(const Offset(64.6, 17.6), const Offset(56.4, 13.4), 3.2),
+        ])),
+    GuideStep(
+        'Add a big shiny eye, a nose and a smile 😊',
+        head([
+          ..._eye(73.4, 19.6, 2.7),
+          _dot(86, 22.4, 0.8),
+          _smooth(
+              const [Offset(80, 26.4), Offset(83.4, 27.2), Offset(86, 25.8)]),
+          _blush(77.6, 24),
+        ])),
+    GuideStep('Draw a long, thick neck and a round body ⬆️', [
       _smooth(backNeck),
       _smooth(frontNeck),
+      _smooth(bodyLine),
     ]),
-    GuideStep('Add two little horns with round tips and an ear 👂', [
-      _line(const [Offset(50, 15.6), Offset(47.6, 7)]),
-      _circle(47.2, 5.4, 1.9),
-      _line(const [Offset(57, 15.4), Offset(55.4, 6.4)]),
-      _circle(55.2, 4.8, 1.9),
-      _leaf(const Offset(45, 23), const Offset(34, 17), 3.6),
-      _smooth(const [Offset(44.6, 22.6), Offset(38, 19.6), Offset(36.4, 18.2)]),
+    GuideStep('Draw four long legs with hooves 🦵', [
+      for (final (x, top) in legs) ...leg(x, top),
     ]),
-    GuideStep('Add a gentle eye with long lashes, a nose and a smile 😊', [
-      ..._eye(63.6, 25.4, 3.4),
+    GuideStep('Add a tail with a tuft and a fuzzy mane 〰️', [
       _smooth(const [
-        Offset(58.6, 24.6),
-        Offset(61, 21.6),
-        Offset(65.6, 21.2),
-        Offset(68.6, 23.6)
+        Offset(20, 60),
+        Offset(15.4, 64),
+        Offset(13.4, 71),
+        Offset(14, 77)
       ]),
-      for (final (x, y, dx, dy) in const <(double, double, double, double)>[
-        (60.2, 22.6, -1.8, -1.8),
-        (62.6, 21.6, -0.8, -2.4),
-        (65, 21.4, 0.6, -2.4),
-        (67.4, 22.4, 1.6, -1.8),
-      ])
-        _fine([Offset(x, y), Offset(x + dx, y + dy)]),
-      _oval(87.4, 31.4, 1.5, 0.9, angle: 0.7),
-      _smooth(const [Offset(89.4, 40.2), Offset(84, 39.4), Offset(78, 39.8)]),
-      _smooth(const [Offset(60, 33), Offset(66, 38.4), Offset(70, 41.8)]),
+      _leaf(const Offset(14, 77), const Offset(12.6, 85), 3.2),
+      for (int i = 0; i < 7; i++) tuft(0.1 + 0.13 * i),
     ]),
-    GuideStep(
-        'Draw patches like a net all over the neck and head 🟫', [patches]),
-    GuideStep('Add little hairs along the back of the neck 〰️', [
-      for (int i = 0; i < 9; i++) mane(0.05 + 0.1 * i),
-      _fine(const [Offset(64, 20), Offset(68, 21)]),
-    ]),
-    GuideStep('Rub out the helper lines and shade the patches ✏️', [
-      _hatch(patches.path, angle: 1.1, gap: 0.75, seed: 3),
-      _hatch(throat, angle: 0.5, gap: 1.2, seed: 5),
-      _hatch(_minus(ellipsePath(80, 36, 9, 6), ellipsePath(80, 32, 9, 6)),
-          angle: 0.4, gap: 0.9, seed: 6),
-      _hatch(ellipsePath(87.4, 31.4, 1.4, 0.8), angle: 0.7, gap: 0.5, seed: 7),
+    GuideStep('Rub out the helper lines and draw patches all over 🟫', [
+      patches,
+      _hatch(patches.path, angle: 1.1, gap: 0.9, cross: true),
+      _hatch(_minus(body, body.shift(const Offset(0, -4))),
+          angle: 0.5, gap: 1.4, seed: 2),
+      _hatch(_minus(headArea, headArea.shift(const Offset(0, -3.5))),
+          angle: 0.5, gap: 1.4, seed: 3),
+      for (final (x, _) in legs)
+        _hatch(rectPath(x + 0.6, 78, x + 1.8, 90.6),
+            angle: 1.57, gap: 0.8, seed: 4),
+      for (final (x, _) in legs)
+        _hatch(roundRectPath(x - 0.3, 91, x + 4.4, 94.2, 1.2),
+            angle: 1.1, gap: 0.8, seed: 5),
+      _fine(const [Offset(8, 95.6), Offset(24, 95.8)]),
+      _fine(const [Offset(38, 96), Offset(48, 96)]),
+      _fine(const [Offset(62, 95.8), Offset(82, 95.4)]),
     ]),
   ]);
 }
