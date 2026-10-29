@@ -78,11 +78,6 @@ pubspec, loaded in `lib/emoji_font.dart`. Bare `TextStyle`s outside the theme (p
   3-8 steps. Each step's text must have speakable words (a test checks). The reference picture strokes every
   shape and nothing hides anything, so touching parts must end on each other's edge (open curves, `_flip` for
   mirrored halves, `_ellipseOutside`) instead of overlapping.
-  Lesson art is a pencil sketch: helper shapes first (`_helpCircle/_helpOval/_helpLine`, gone in the last step),
-  outline, details, then shading (`_hatch` also lays soft tone; `_eye` is a lifelike eye; `_fluffy`, `_furStrokes`,
-  `_patchGrid` for fur and a giraffe's net pattern; `_sketch` wraps outline-only lessons). `GuidePreviewPainter`
-  draws outlines twice with a small wobble (cached per shape) so they look hand drawn. Every symbol in step text
-  must be in the bundled emoji font (a test checks), and shapes must stay inside 0..100.
 - Coloring page: `_myPage()` in `lib/pages.dart` returning `ColoringPage(name, emoji, regions)`, append to
   `coloringPages`. Later regions draw on top of earlier ones. `Region(path, details: [...])` adds thin texture
   lines clipped to the region (not tappable). A test requires every region to keep >= 12 square units visible.
