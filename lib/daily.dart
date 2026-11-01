@@ -8,12 +8,11 @@ String dayKey(DateTime d) => 'day:${d.year}-${_two(d.month)}-${_two(d.day)}';
 
 /// Today's lesson. Depends only on the calendar date, so it is the same on
 /// every device with no internet, and walks through all lessons in order.
-DrawingGuide dailyGuide(DateTime date, [List<DrawingGuide>? guides]) {
-  final list = guides ?? drawingGuides;
-  final day = DateTime.utc(date.year, date.month, date.day)
-          .millisecondsSinceEpoch ~/
-      Duration.millisecondsPerDay;
-  return list[day % list.length];
+DrawingGuide dailyGuide(DateTime date) {
+  final day =
+      DateTime.utc(date.year, date.month, date.day).millisecondsSinceEpoch ~/
+          Duration.millisecondsPerDay;
+  return drawingGuides[day % drawingGuides.length];
 }
 
 /// Days in a row the daily lesson was finished, counting back from today

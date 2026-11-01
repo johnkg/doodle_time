@@ -46,14 +46,13 @@ https://johnkg.github.io/doodle_time/ (one-time setup: repo Settings > Pages > S
 - `lib/board_painter.dart` - CustomPainter (paper, fills, strokes layer, outlines)
 - `lib/draw_screen.dart` - UI
 - `lib/parental_gate.dart`, `lib/sound_service.dart`, `lib/speech_service.dart`, `lib/save_png_*.dart`
-- `preview/index.html` - clickable HTML mock of the UI feel (not the real app)
 - `docs/` - kids store checklist, privacy policy template
 
 ## Add a drawing lesson
 
 Add a `_myGuide()` in `lib/guides.dart` returning `DrawingGuide(name, emoji, steps)`. Each `GuideStep` has a short
 instruction and the shapes added in that step (100x100 space; use `_dot` for filled eyes/buttons). Append it to
-`drawingGuides` wrapped as `_lv(level, _myGuide())` (1 easy, 2 medium, 3 harder). Keep steps simple: circle, square, triangle, line.
+`drawingGuides` (and in a `lessonTracks` entry). Keep steps simple: circle, square, triangle, line.
 
 ## Add a coloring page
 

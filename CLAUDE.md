@@ -74,7 +74,7 @@ pubspec, loaded in `lib/emoji_font.dart`. Bare `TextStyle`s outside the theme (p
 
 ## Adding content
 - Lesson: `_myGuide()` in `lib/guides.dart` returning `DrawingGuide(name, emoji, steps)`, append to
-  `drawingGuides` as `_lv(level, _myGuide())` (1 easy, 2 medium, 3 harder). Use `_dot` for filled eyes/buttons.
+  `drawingGuides` and to one `lessonTracks` entry. Use `_dot` for filled eyes/buttons.
   3-8 steps. Each step's text must have speakable words (a test checks). The reference picture strokes every
   shape and nothing hides anything, so touching parts must end on each other's edge (open curves, `_flip` for
   mirrored halves, `_ellipseOutside`) instead of overlapping.
@@ -96,10 +96,11 @@ pubspec, loaded in `lib/emoji_font.dart`. Bare `TextStyle`s outside the theme (p
 - `lib/guides.dart`, `lib/guide_painter.dart` 25 step-by-step lessons + tracks + reference painter
 - `lib/unlock.dart` track unlock rules
 - `lib/daily.dart` today's lesson by date, `day:YYYY-MM-DD` keys, streak
-- `lib/draw_screen.dart` all UI (large; consider splitting widgets into files)
+- `lib/draw_screen.dart` screen state + layout (lesson, progress, sound/voice); small widgets live in `lib/ui/`:
+  `style.dart` (colors, sizes), `lesson_view.dart` (3 lesson layouts), `picture_picker.dart`, `tool_panel.dart`,
+  `tool_widgets.dart`, `board_canvas.dart`, `daily_banner.dart`, `dialogs.dart`, `grown_ups_sheet.dart`
 - `lib/speech_service.dart` flutter_tts, `lib/sound_service.dart` audioplayers, `lib/parental_gate.dart` math gate
 - `assets/sounds/` tiny generated wav files for stamp/fill
-- `preview/index.html` throwaway HTML mock of the feel (not the real app)
 - `.github/workflows/ci.yml` analyze + test + web build
 
 ## Not done yet / ideas

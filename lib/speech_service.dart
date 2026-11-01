@@ -5,6 +5,14 @@ import 'package:flutter_tts/flutter_tts.dart';
 /// Created lazily; any failure (no voice installed, browser blocks it) is
 /// ignored so drawing never breaks.
 class SpeechService {
+  /// Browsers load their voice list late, so allow a few tries.
+  static const int _maxVoiceTries = 4;
+
+  // The web passes the rate straight to the browser (1.0 = normal), but
+  // phones use 0.5 for normal speed. 0.4 on the web was very slow.
+  static final double _speechRate = kIsWeb ? 0.95 : 0.5;
+  static final double _pitch = kIsWeb ? 1.3 : 1.2;
+
   FlutterTts? _tts;
   int _voiceTries = 0;
   bool _voicePicked = false;
@@ -85,8 +93,7 @@ class SpeechService {
   }
 
   Future<void> _chooseVoice(FlutterTts tts) async {
-    // Browsers load their voice list late, so allow a few tries.
-    if (_voicePicked || _voiceTries >= 4) return;
+    if (_voicePicked || _voiceTries >= _maxVoiceTries) return;
     _voiceTries++;
     final raw = await tts.getVoices;
     if (raw is! List) return;
@@ -115,10 +122,8 @@ class SpeechService {
       } catch (_) {
         // Keep the default voice.
       }
-      // The web passes the rate straight to the browser (1.0 = normal), but
-      // phones use 0.5 for normal speed. 0.4 on the web was very slow.
-      await tts.setSpeechRate(kIsWeb ? 0.95 : 0.5);
-      await tts.setPitch(kIsWeb ? 1.3 : 1.2);
+      await tts.setSpeechRate(_speechRate);
+      await tts.setPitch(_pitch);
       await tts.speak(lively(words));
     } catch (_) {
       // Ignore: voice unavailable.

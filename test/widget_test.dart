@@ -222,7 +222,6 @@ void main() {
       expect(names.length, drawingGuides.length);
       for (final g in drawingGuides) {
         expect(g.steps.length, inInclusiveRange(3, 8), reason: g.name);
-        expect(g.level, inInclusiveRange(1, 3), reason: g.name);
         for (final s in g.steps) {
           expect(s.text, isNotEmpty, reason: g.name);
           expect(s.shapes, isNotEmpty, reason: '${g.name}: ${s.text}');
@@ -605,7 +604,7 @@ void main() {
       final covered = _cmapCodePoints(
           File('assets/fonts/NotoColorEmoji.ttf').readAsBytesSync());
       final used = <int>{
-        for (final f in Directory('lib').listSync().whereType<File>())
+        for (final f in Directory('lib').listSync(recursive: true).whereType<File>())
           if (f.path.endsWith('.dart'))
             for (final r in f.readAsStringSync().runes)
               if (r >= 0x2000 && r != 0xFE0F && r != 0x200D) r,
