@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'guides.dart';
+import 'shapes.dart';
 
 /// Reference picture for a lesson step, drawn like a pencil sketch: light
 /// helper lines, dark outlines, thin strokes for fur and shadow. The new part
@@ -13,6 +14,16 @@ class GuidePreviewPainter extends CustomPainter {
 
   final DrawingGuide guide;
   final int step;
+
+  // Line widths in design units (the picture is 100 wide).
+  static const double _helperWidth = 0.8;
+  static const double _helperWidthCurrent = 1.3;
+  static const double _shadeWidth = 0.55;
+  static const double _shadeWidthCurrent = 0.7;
+  static const double _lineWidth = 1.2;
+  static const double _lineWidthCurrent = 2.2;
+  static const double _helperAlphaCurrent = 0.75;
+  static const double _shadeAlpha = 0.75;
 
   static const Color _pencil = Color(0xFF55595E);
   static const Color _helper = Color(0xFFAFC3D3);
@@ -35,17 +46,20 @@ class GuidePreviewPainter extends CustomPainter {
       case GuideKind.guide:
         return p
           ..style = PaintingStyle.stroke
-          ..strokeWidth = isCurrent ? 1.3 : 0.8
-          ..color = isCurrent ? _current.withValues(alpha: 0.75) : _helper;
+          ..strokeWidth = isCurrent ? _helperWidthCurrent : _helperWidth
+          ..color = isCurrent
+              ? _current.withValues(alpha: _helperAlphaCurrent)
+              : _helper;
       case GuideKind.shade:
         return p
           ..style = PaintingStyle.stroke
-          ..strokeWidth = isCurrent ? 0.7 : 0.55
-          ..color = (isCurrent ? _current : _pencil).withValues(alpha: 0.75);
+          ..strokeWidth = isCurrent ? _shadeWidthCurrent : _shadeWidth
+          ..color =
+              (isCurrent ? _current : _pencil).withValues(alpha: _shadeAlpha);
       case GuideKind.line:
         return p
           ..style = PaintingStyle.stroke
-          ..strokeWidth = isCurrent ? 2.2 : 1.2
+          ..strokeWidth = isCurrent ? _lineWidthCurrent : _lineWidth
           ..color = isCurrent ? _current : _pencil;
       case GuideKind.dot:
         return p
@@ -60,10 +74,8 @@ class GuidePreviewPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final s = math.min(size.width, size.height) / 100;
     canvas.save();
-    canvas.translate((size.width - 100 * s) / 2, (size.height - 100 * s) / 2);
-    canvas.scale(s);
+    canvas.transform(designMatrix(size).storage);
     final last = math.min(step, guide.steps.length - 1);
     final finished = last == guide.steps.length - 1;
     for (final kind in _layers) {

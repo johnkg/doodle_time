@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'drawing_store.dart';
 import 'models.dart';
 import 'pages.dart';
+import 'shapes.dart';
 
 const List<Color> kPalette = [
   Color(0xFFE53935), // red
@@ -22,10 +23,35 @@ const List<Color> kPalette = [
 ];
 
 const List<String> kStamps = [
-  '⭐', '❤️', '🌈', '🐶', '🐱', '🦋', '🌸', '🚀', '🍎', '☀️',
+  '⭐',
+  '❤️',
+  '🌈',
+  '🐶',
+  '🐱',
+  '🦋',
+  '🌸',
+  '🚀',
+  '🍎',
+  '☀️',
 ];
 
 const List<double> kBrushSizes = [8, 16, 30];
+
+/// Stamps are this big plus [_stampGrowth] times the brush size.
+const double _stampBaseSize = 40;
+const double _stampGrowth = 3;
+
+/// The eraser is wider than the brush so it is easy to hit.
+const double _eraserWidthFactor = 1.6;
+
+/// Moves shorter than this many pixels add no point to a stroke.
+const double _minStrokeStep = 2;
+
+/// Wait this long after the last change before saving.
+const Duration _saveDelay = Duration(milliseconds: 400);
+
+/// Random fill colors ("rainbow" tool): any hue, bright and strong.
+const double _fillRainbowSaturation = 0.8;
 
 class DrawingController extends ChangeNotifier {
   DrawingController({this.store});
@@ -50,7 +76,7 @@ class DrawingController extends ChangeNotifier {
 
   bool get canUndo => ops.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
-  double get stampSize => 40 + brushSize * 3;
+  double get stampSize => _stampBaseSize + brushSize * _stampGrowth;
 
   // ---- persistence --------------------------------------------------------
 
@@ -104,7 +130,7 @@ class DrawingController extends ChangeNotifier {
   void _scheduleSave() {
     if (store == null) return;
     _saveTimer?.cancel();
-    _saveTimer = Timer(const Duration(milliseconds: 400), saveNow);
+    _saveTimer = Timer(_saveDelay, saveNow);
   }
 
   Future<void> saveNow() async {
@@ -216,7 +242,7 @@ class DrawingController extends ChangeNotifier {
         _lastPx = local;
         live = StrokeOp(
           color: color,
-          width: erasing ? brushSize * 1.6 : brushSize,
+          width: erasing ? brushSize * _eraserWidthFactor : brushSize,
           rainbow: rainbow,
           erase: erasing,
           first: n,
@@ -232,7 +258,7 @@ class DrawingController extends ChangeNotifier {
   void pointerMove(Offset local, Size size) {
     final s = live;
     if (s == null) return;
-    if ((local - _lastPx).distance < 2) return;
+    if ((local - _lastPx).distance < _minStrokeStep) return;
     _lastPx = local;
     s.points.add(_norm(local, size));
     notifyListeners();
@@ -248,11 +274,13 @@ class DrawingController extends ChangeNotifier {
   void _fillAt(Offset local, Size size) {
     final p = page;
     if (p == null) return;
-    final m = pageMatrix(size);
+    final m = designMatrix(size);
     for (int i = p.regions.length - 1; i >= 0; i--) {
       if (p.regions[i].path.transform(m.storage).contains(local)) {
         final fillColor = rainbow
-            ? HSVColor.fromAHSV(1, _rng.nextDouble() * 360, 0.8, 1).toColor()
+            ? HSVColor.fromAHSV(
+                    1, _rng.nextDouble() * 360, _fillRainbowSaturation, 1)
+                .toColor()
             : color;
         _push(FillOp(region: i, color: fillColor));
         return;

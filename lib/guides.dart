@@ -28,8 +28,6 @@ class GuideShape {
       : kind = kind ?? (fill ? GuideKind.dot : GuideKind.line);
   final Path path;
   final GuideKind kind;
-
-  bool get fill => kind == GuideKind.dot || kind == GuideKind.shine;
 }
 
 class GuideStep {
@@ -43,13 +41,10 @@ class GuideStep {
 }
 
 class DrawingGuide {
-  DrawingGuide(this.name, this.emoji, this.steps, {this.level = 1});
+  DrawingGuide(this.name, this.emoji, this.steps);
   final String name;
   final String emoji;
   final List<GuideStep> steps;
-
-  /// 1 = easy, 2 = medium, 3 = harder. Used to group the picker.
-  final int level;
 }
 
 // ---- tiny builders ----------------------------------------------------------
@@ -86,16 +81,8 @@ GuideShape _star(double cx, double cy, double r) =>
     GuideShape(polyPath(starPoints(cx, cy, r, r * 0.45, 5)));
 
 /// Leaf or petal from [base] to [tip], [w] wide.
-GuideShape _leaf(Offset base, Offset tip, double w) {
-  final mid = (base + tip) / 2;
-  final d = tip - base;
-  final n = Offset(-d.dy, d.dx) / d.distance * w;
-  return GuideShape(Path()
-    ..moveTo(base.dx, base.dy)
-    ..quadraticBezierTo(mid.dx + n.dx, mid.dy + n.dy, tip.dx, tip.dy)
-    ..quadraticBezierTo(mid.dx - n.dx, mid.dy - n.dy, base.dx, base.dy)
-    ..close());
-}
+GuideShape _leaf(Offset base, Offset tip, double w) =>
+    GuideShape(leafPath(base, tip, w));
 
 /// Middle vein and a few side veins for a [_leaf].
 List<GuideShape> _veins(Offset base, Offset tip, double w) {
@@ -357,10 +344,8 @@ DrawingGuide _sketch(DrawingGuide g,
     final last = steps.removeLast();
     steps.add(GuideStep(last.text, [...last.shapes, ...shade]));
   }
-  return DrawingGuide(g.name, g.emoji, steps, level: g.level);
+  return DrawingGuide(g.name, g.emoji, steps);
 }
-
-Path _minus(Path a, Path b) => Path.combine(PathOperation.difference, a, b);
 
 Path _mirror(Path p) => p.transform(
     (Matrix4.translationValues(100, 0, 0) * Matrix4.diagonal3Values(-1, 1, 1))
@@ -402,7 +387,7 @@ DrawingGuide _sun() => _sketch(
         _helpLine(const [Offset(50, 17), Offset(50, 83)]),
       ],
       shade: [
-        _hatch(_minus(circlePath(50, 50, 16), circlePath(47.5, 47.5, 16)),
+        _hatch(circlePath(50, 50, 16).minus(circlePath(47.5, 47.5, 16)),
             angle: 1.1, gap: 1.1),
         _hatch(
             [
@@ -412,7 +397,7 @@ DrawingGuide _sun() => _sketch(
                   _on(50, 50, 33, 33, i * math.pi / 4),
                   _on(50, 50, 19, 19, i * math.pi / 4 + 0.17),
                 ]),
-            ].reduce((a, b) => Path.combine(PathOperation.union, a, b)),
+            ].union(),
             angle: 0.8,
             gap: 1.1,
             seed: 2),
@@ -492,7 +477,7 @@ DrawingGuide _apple() => _sketch(
             Offset(40, 28),
           ]),
         ])
-          _hatch(_minus(apple, apple.shift(const Offset(-5, -4))),
+          _hatch(apple.minus(apple.shift(const Offset(-5, -4))),
               angle: 1.1, gap: 1.1),
         _hatch(_leaf(const Offset(52.4, 25), const Offset(70, 16), 6).path,
             angle: 1.3, gap: 1.4, seed: 2),
@@ -548,7 +533,7 @@ DrawingGuide _moon() => _sketch(
           Path.combine(PathOperation.difference, circlePath(50, 50, 30),
               circlePath(64, 42, 26)),
         ])
-          _hatch(_minus(moon, moon.shift(const Offset(-3.5, 2.5))),
+          _hatch(moon.minus(moon.shift(const Offset(-3.5, 2.5))),
               angle: 1.1, gap: 1.1),
         _hatch(
             Path.combine(
@@ -635,7 +620,7 @@ DrawingGuide _house() {
       _helpLine(const [Offset(4, 82), Offset(96, 82)]),
     ],
     shade: [
-      _hatch(_minus(roof, chimney), angle: 1.1, gap: 1.5),
+      _hatch(roof.minus(chimney), angle: 1.1, gap: 1.5),
       _hatch(rectPath(44.6, 68, 55.4, 81.6), angle: 0.9, gap: 1.1, seed: 2),
       _hatch(rectPath(70, 49, 74, 81.6), angle: 1.1, gap: 1.1, seed: 3),
       for (final x in [31.0, 59.0])
@@ -655,7 +640,7 @@ DrawingGuide _tree() => _sketch(
             circlePath(40, 54, 11),
             circlePath(60, 54, 11),
             circlePath(50, 50, 13),
-          ].reduce((a, b) => Path.combine(PathOperation.union, a, b))),
+          ].union()),
         ]),
         GuideStep('Draw the trunk getting wider at the bottom 🪵', [
           _smooth(const [
@@ -721,9 +706,9 @@ DrawingGuide _tree() => _sketch(
             circlePath(40, 54, 11),
             circlePath(60, 54, 11),
             circlePath(50, 50, 13),
-          ].reduce((a, b) => Path.combine(PathOperation.union, a, b)),
+          ].union(),
         ])
-          _hatch(_minus(crown, crown.shift(const Offset(-4, -4))),
+          _hatch(crown.minus(crown.shift(const Offset(-4, -4))),
               angle: 1.1, gap: 1.1),
         for (final trunk in [
           blobPath(const [
@@ -737,7 +722,7 @@ DrawingGuide _tree() => _sketch(
             Offset(55, 62),
           ]),
         ])
-          _hatch(_minus(trunk, trunk.shift(const Offset(-3.5, 0))),
+          _hatch(trunk.minus(trunk.shift(const Offset(-3.5, 0))),
               angle: 1.2, gap: 1.1, seed: 2),
         _hatch(ellipsePath(50, 92.6, 24, 1.8), angle: 0.3, gap: 0.9, seed: 3),
       ],
@@ -840,7 +825,7 @@ DrawingGuide _mushroom() {
           ..quadraticBezierTo(50, 44, 14, 52)
           ..close(),
       ])
-        _hatch(_minus(cap, cap.shift(const Offset(-4, -3))),
+        _hatch(cap.minus(cap.shift(const Offset(-4, -3))),
             angle: 1.1, gap: 1.1),
       _hatch(
           Path()
@@ -864,7 +849,7 @@ DrawingGuide _mushroom() {
           Offset(60, 56),
         ]),
       ])
-        _hatch(_minus(stem, stem.shift(const Offset(-3.5, 0))),
+        _hatch(stem.minus(stem.shift(const Offset(-3.5, 0))),
             angle: 1.2, gap: 1.1, seed: 3),
     ],
   );
@@ -1028,7 +1013,7 @@ DrawingGuide _sailboat() => _sketch(
             ..lineTo(52, 53)
             ..close(),
         ])
-          _hatch(_minus(sail, sail.shift(const Offset(-4, 0))),
+          _hatch(sail.minus(sail.shift(const Offset(-4, 0))),
               angle: 1.2, gap: 1.1, seed: 2),
       ],
     );
@@ -1091,7 +1076,7 @@ DrawingGuide _fish() {
       ..._scallops(body, const Rect.fromLTRB(28, 40, 58, 64), 5, avoid: fin),
     ]),
     GuideStep('Rub out the helper lines, shade and add bubbles 🫧', [
-      _hatch(_minus(body, body.shift(const Offset(0, 5))),
+      _hatch(body.minus(body.shift(const Offset(0, 5))),
           angle: 1.1, gap: 1.1),
       for (final (i, f) in [tail, topFin, bottomFin].indexed)
         _hatch(f, angle: 0.3 + i, gap: 1.3, seed: i + 2),
@@ -1177,7 +1162,7 @@ DrawingGuide _flower() {
                           _on(c.dx, c.dy, 24, 24, i * 2 * math.pi / 14 + 0.22),
                           4.6)
                       .path,
-              ].reduce((a, b) => Path.combine(PathOperation.union, a, b))),
+              ].union()),
           angle: 1.1,
           gap: 1.1,
           seed: 2),
@@ -1281,7 +1266,7 @@ DrawingGuide _iceCream() => _sketch(
             Offset(50, 50.6),
           ]),
         ])
-          _hatch(_minus(scoop, scoop.shift(const Offset(-3, -4))),
+          _hatch(scoop.minus(scoop.shift(const Offset(-3, -4))),
               angle: 1.1, gap: 1.1),
         for (final top in [
           blobPath(const [
@@ -1295,9 +1280,9 @@ DrawingGuide _iceCream() => _sketch(
             Offset(50, 30),
           ]),
         ])
-          _hatch(_minus(top, top.shift(const Offset(-3, -3))),
+          _hatch(top.minus(top.shift(const Offset(-3, -3))),
               angle: 1.1, gap: 1.1, seed: 2),
-        _hatch(_minus(circlePath(50, 9.6, 3.8), circlePath(48.6, 8.2, 3.8)),
+        _hatch(circlePath(50, 9.6, 3.8).minus(circlePath(48.6, 8.2, 3.8)),
             angle: 1.1, gap: 0.8, seed: 3),
         _hatch(rectPath(62, 51.4, 67.6, 58.6), angle: 1.1, gap: 1.1, seed: 4),
       ],
@@ -1408,13 +1393,11 @@ DrawingGuide _car() {
       ])
         _hatch(glass, angle: -0.9, gap: 2.6, seed: 2),
       for (final x in [26.0, 74.0])
-        _hatch(_minus(circlePath(x, 73, 9), circlePath(x, 73, 5)),
+        _hatch(circlePath(x, 73, 9).minus(circlePath(x, 73, 5)),
             angle: 1.1, gap: 1, cross: true, seed: 3),
       _hatch(
-          _minus(
-              Path.combine(
-                  PathOperation.intersect, body, rectPath(0, 65, 100, 80)),
-              Path.combine(PathOperation.union, circlePath(26, 73, 9.6),
+          Path.combine(
+                  PathOperation.intersect, body, rectPath(0, 65, 100, 80)).minus(Path.combine(PathOperation.union, circlePath(26, 73, 9.6),
                   circlePath(74, 73, 9.6))),
           angle: 1.1,
           gap: 1.2,
@@ -1528,7 +1511,7 @@ DrawingGuide _train() => _sketch(
             circlePath(71, 20, 5),
             circlePath(79, 13, 6),
             circlePath(89, 9, 5),
-          ].reduce((a, b) => Path.combine(PathOperation.union, a, b))),
+          ].union()),
         ]),
         GuideStep('Draw the track 🛤️', [
           _line(const [Offset(0, 86), Offset(100, 86)]),
@@ -1547,8 +1530,7 @@ DrawingGuide _train() => _sketch(
       shade: [
         for (final (x, r) in const [(24.0, 8.0), (44.0, 8.0), (62.0, 5.4)])
           _hatch(
-              _minus(circlePath(x, x == 62 ? 80 : 78, r),
-                  circlePath(x, x == 62 ? 80 : 78, r - 2.2)),
+              circlePath(x, x == 62 ? 80 : 78, r).minus(circlePath(x, x == 62 ? 80 : 78, r - 2.2)),
               angle: 1.1,
               gap: 1,
               seed: 2),
@@ -1696,7 +1678,7 @@ DrawingGuide _rocket() {
             Offset(44, 20),
           ]),
         ])
-          _hatch(_minus(body, body.shift(const Offset(-4, 0))),
+          _hatch(body.minus(body.shift(const Offset(-4, 0))),
               angle: 1.4, gap: 1.1),
         _hatch(
             blobPath(const [
@@ -1721,7 +1703,7 @@ DrawingGuide _rocket() {
             gap: 1.1,
             seed: 3),
       ]),
-      _hatch(_minus(planet, planet.shift(const Offset(-3, -3))),
+      _hatch(planet.minus(planet.shift(const Offset(-3, -3))),
           angle: 1.1, gap: 1, seed: 4),
     ],
   );
@@ -1766,7 +1748,7 @@ DrawingGuide _octopus() {
   ]);
   final armArea = [
     for (final a in left) ...[a.path, _flip(a).path],
-  ].reduce((a, b) => Path.combine(PathOperation.union, a, b));
+  ].union();
   return DrawingGuide('Octopus', '🐙', [
     GuideStep('Draw a big circle and a line across it ⭕', [
       _helpCircle(50, 35, 22),
@@ -1808,11 +1790,11 @@ DrawingGuide _octopus() {
         ],
     ]),
     GuideStep('Rub out the helper lines, shade and add bubbles 🫧', [
-      _hatch(_minus(head, head.shift(const Offset(-4, 3))),
+      _hatch(head.minus(head.shift(const Offset(-4, 3))),
           angle: 1.1, gap: 1.1),
-      _hatch(_minus(head, head.shift(const Offset(3, 3))),
+      _hatch(head.minus(head.shift(const Offset(3, 3))),
           angle: 1.9, gap: 1.4, seed: 2),
-      _hatch(_minus(armArea, rectPath(0, 0, 100, 74)),
+      _hatch(armArea.minus(rectPath(0, 0, 100, 74)),
           angle: 1.1, gap: 1.2, seed: 3),
       _circle(84, 22, 4),
       _circle(90, 12, 3),
@@ -1859,8 +1841,8 @@ DrawingGuide _butterfly() {
   // Dark band along the outer edge of each wing.
   final edge = Path.combine(
       PathOperation.union,
-      _minus(upper, ellipsePath(34, 34, 19, 13, angle: 0.5)),
-      _minus(lower, ellipsePath(38, 62, 14, 11, angle: -0.6)));
+      upper.minus(ellipsePath(34, 34, 19, 13, angle: 0.5)),
+      lower.minus(ellipsePath(38, 62, 14, 11, angle: -0.6)));
   return DrawingGuide('Butterfly', '🦋', [
     GuideStep('Draw a line down the middle and four circles 🦋', [
       _helpLine(const [Offset(50, 14), Offset(50, 76)]),
@@ -2022,11 +2004,11 @@ DrawingGuide _bird() {
       _arc(54.4, 82.4, 2.2, 3.4, 2.6),
     ]),
     GuideStep('Rub out the helper lines and shade the back ✏️', [
-      _hatch(_minus(_minus(body, tummy), wing), angle: 1.1, gap: 1.2),
-      _hatch(_minus(wing, wing.shift(const Offset(0, -3))),
+      _hatch(body.minus(tummy).minus(wing), angle: 1.1, gap: 1.2),
+      _hatch(wing.minus(wing.shift(const Offset(0, -3))),
           angle: 1.1, gap: 1.2, seed: 2),
       _furStrokes(
-          Path.combine(PathOperation.intersect, body, _minus(tummy, wing)), 14,
+          Path.combine(PathOperation.intersect, body, tummy.minus(wing)), 14,
           len: 2, angle: 2.2, seed: 3),
       for (final x in [12.0, 28.0, 66.0, 80.0])
         _fine([Offset(x, 81.6), Offset(x + 6, 82.2)]),
@@ -2153,7 +2135,7 @@ DrawingGuide _turtle() {
       _spots(blobPath(back), 4, 1.2, seed: 3),
       _spots(
           Path.combine(PathOperation.intersect, blobPath(head),
-              _minus(rectPath(20, 36, 30, 50), circlePath(17, 43.6, 5.4))),
+              rectPath(20, 36, 30, 50).minus(circlePath(17, 43.6, 5.4))),
           3,
           1,
           seed: 4),
@@ -2162,8 +2144,7 @@ DrawingGuide _turtle() {
       for (int i = 0; i < plates.length; i++)
         _hatch(plates[i], angle: 1.1, gap: 1.1, seed: i),
       _hatch(
-          _minus(shell,
-              plates.reduce((a, b) => Path.combine(PathOperation.union, a, b))),
+          shell.minus(plates.union()),
           angle: 0.4,
           gap: 2.2,
           seed: 9),
@@ -2303,11 +2284,11 @@ DrawingGuide _cat() {
           len: 2.4, angle: -1.9),
       _furStrokes(_mirror(blobPath([...innerEar, const Offset(39, 22)])), 5,
           len: 2.4, angle: -1.2, seed: 3),
-      _furStrokes(_minus(bodyArea, circlePath(50, 35, 19)), 34,
+      _furStrokes(bodyArea.minus(circlePath(50, 35, 19)), 34,
           len: 2.8, seed: 4),
-      _hatch(_minus(bodyArea, bodyArea.shift(const Offset(3, -2))),
+      _hatch(bodyArea.minus(bodyArea.shift(const Offset(3, -2))),
           angle: 1.2, gap: 1.2),
-      _hatch(_minus(bodyArea, bodyArea.shift(const Offset(-3, -2))),
+      _hatch(bodyArea.minus(bodyArea.shift(const Offset(-3, -2))),
           angle: 1.9, gap: 1.2, seed: 5),
       _hatch(ellipsePath(50, 93.6, 24, 1.8), angle: 0.3, gap: 1, seed: 6),
       for (final p in const [
@@ -2423,11 +2404,11 @@ DrawingGuide _bunny() {
     GuideStep('Rub out the helper lines and add soft fur ✏️', [
       _hatch(blobPath(innerEar), angle: 1.4, gap: 1),
       _hatch(_mirror(blobPath(innerEar)), angle: 1.7, gap: 1, seed: 2),
-      _furStrokes(_minus(bodyArea, circlePath(50, 38, 15)), 30,
+      _furStrokes(bodyArea.minus(circlePath(50, 38, 15)), 30,
           len: 2.6, seed: 3),
-      _hatch(_minus(bodyArea, bodyArea.shift(const Offset(3, -2))),
+      _hatch(bodyArea.minus(bodyArea.shift(const Offset(3, -2))),
           angle: 1.2, gap: 1.2, seed: 4),
-      _hatch(_minus(bodyArea, bodyArea.shift(const Offset(-3, -2))),
+      _hatch(bodyArea.minus(bodyArea.shift(const Offset(-3, -2))),
           angle: 1.9, gap: 1.2, seed: 5),
       _hatch(ellipsePath(50, 94, 26, 1.8), angle: 0.3, gap: 1, seed: 6),
       _furStrokes(
@@ -2564,7 +2545,7 @@ DrawingGuide _lion() {
     GuideStep('Draw a big spiky mane all around 🌞', [GuideShape(mane)]),
     GuideStep('Add hair lines in the mane 〰️', strands),
     GuideStep('Rub out the helper lines and add lots of fur ✏️', [
-      _furStrokes(_minus(_minus(mane, face), ears), 150,
+      _furStrokes(mane.minus(face).minus(ears), 150,
           len: 3.6, from: const Offset(cx, cy), seed: 7),
       _furStrokes(
           blobPath(const [
@@ -2577,9 +2558,9 @@ DrawingGuide _lion() {
           8,
           len: 3,
           seed: 8),
-      _hatch(_minus(face, face.shift(const Offset(2.4, 1))),
+      _hatch(face.minus(face.shift(const Offset(2.4, 1))),
           angle: 1.2, gap: 1.2),
-      _hatch(_minus(face, face.shift(const Offset(-2.4, 1))),
+      _hatch(face.minus(face.shift(const Offset(-2.4, 1))),
           angle: 1.9, gap: 1.2, seed: 2),
       _hatch(
           blobPath(const [
@@ -2715,7 +2696,7 @@ DrawingGuide _dog() {
       _hatch(nose, angle: 0.6, gap: 0.8, cross: true),
       _furStrokes(blobPath(ear), 16, len: 3.2, angle: 1.8, seed: 3),
       _furStrokes(_mirror(blobPath(ear)), 16, len: 3.2, angle: 1.3, seed: 4),
-      _furStrokes(_minus(neckArea, circlePath(50, 60, 12)), 30,
+      _furStrokes(neckArea.minus(circlePath(50, 60, 12)), 30,
           len: 3.4, angle: 1.7, seed: 5),
       _furStrokes(
           blobPath(const [
@@ -2738,7 +2719,7 @@ DrawingGuide _dog() {
         _dot(p.dx, p.dy, 0.4),
         _dot(100 - p.dx, p.dy, 0.4),
       ],
-      _hatch(_minus(ellipsePath(50, 68, 13, 5), ellipsePath(50, 65, 13, 5)),
+      _hatch(ellipsePath(50, 68, 13, 5).minus(ellipsePath(50, 65, 13, 5)),
           angle: 1.2, gap: 1.2),
     ]),
   ]);
@@ -2839,10 +2820,10 @@ DrawingGuide _penguin() {
       _blush(61.5, 37),
     ]),
     GuideStep('Rub out the helper lines and shade the back dark ✏️', [
-      _hatch(_minus(body, front), angle: 1.1, gap: 1.1, cross: true),
+      _hatch(body.minus(front), angle: 1.1, gap: 1.1, cross: true),
       _hatch(blobPath(wing), angle: 1.1, gap: 1.1, seed: 2),
       _hatch(_mirror(blobPath(wing)), angle: 1.1, gap: 1.1, seed: 3),
-      _hatch(_minus(front, front.shift(const Offset(0, -5))),
+      _hatch(front.minus(front.shift(const Offset(0, -5))),
           angle: -0.5, gap: 1.8, seed: 4),
       _smooth(const [Offset(50, 13), Offset(48.6, 9.4), Offset(46, 7.6)]),
       _smooth(const [Offset(50, 13), Offset(51.2, 8.6), Offset(54, 6.8)]),
@@ -2906,8 +2887,7 @@ DrawingGuide _giraffe() {
   final headArea = blobPath([for (final p in headPts) hp(p)]);
   final body = blobPath(bodyLine);
   final neck = blobPath([...backNeck, ...frontNeck.reversed]);
-  final coat = _minus(
-      Path.combine(PathOperation.union, body, neck), rectPath(40, 0, 100, 41));
+  final coat = Path.combine(PathOperation.union, body, neck).minus(rectPath(40, 0, 100, 41));
   final patches = _spots(coat, 20, 3.1, seed: 11, patchy: true);
   final back = smoothPath(backNeck).computeMetrics().first;
   // Legs hang from the belly; the lower leg is a little thinner.
@@ -2986,9 +2966,9 @@ DrawingGuide _giraffe() {
     GuideStep('Rub out the helper lines and draw patches all over 🟫', [
       patches,
       _hatch(patches.path, angle: 1.1, gap: 0.9, cross: true),
-      _hatch(_minus(body, body.shift(const Offset(0, -4))),
+      _hatch(body.minus(body.shift(const Offset(0, -4))),
           angle: 0.5, gap: 1.4, seed: 2),
-      _hatch(_minus(headArea, headArea.shift(const Offset(0, -3.5))),
+      _hatch(headArea.minus(headArea.shift(const Offset(0, -3.5))),
           angle: 0.5, gap: 1.4, seed: 3),
       for (final (x, _) in legs)
         _hatch(rectPath(x + 0.6, 78, x + 1.8, 90.6),
@@ -3070,7 +3050,7 @@ DrawingGuide _snowman() => _sketch(
       ],
       shade: [
         for (final (y, r) in const [(76.0, 16.0), (48.0, 12.0), (27.0, 9.0)])
-          _hatch(_minus(circlePath(50, y, r), circlePath(47.4, y - 2, r)),
+          _hatch(circlePath(50, y, r).minus(circlePath(47.4, y - 2, r)),
               angle: 1.1, gap: 1.1, seed: y.toInt()),
         _hatch(rectPath(43, 4, 57, 14),
             angle: 1.1, gap: 1, cross: true, seed: 2),
@@ -3079,39 +3059,33 @@ DrawingGuide _snowman() => _sketch(
       ],
     );
 
-DrawingGuide _lv(int level, DrawingGuide g) =>
-    DrawingGuide(g.name, g.emoji, g.steps, level: level);
-
-/// Grouped by level (1 easy, 2 medium, 3 harder); easiest first inside each.
+/// Every lesson, in the order the daily lesson walks through them.
 final List<DrawingGuide> drawingGuides = [
-  // Easy
-  _lv(1, _sun()),
-  _lv(1, _apple()),
-  _lv(1, _moon()),
-  _lv(1, _house()),
-  _lv(1, _tree()),
-  _lv(1, _mushroom()),
-  _lv(1, _robot()),
-  _lv(1, _sailboat()),
-  // Medium
-  _lv(2, _fish()),
-  _lv(2, _flower()),
-  _lv(2, _iceCream()),
-  _lv(2, _car()),
-  _lv(2, _train()),
-  _lv(2, _rocket()),
-  _lv(2, _octopus()),
-  // Harder
-  _lv(3, _butterfly()),
-  _lv(3, _bird()),
-  _lv(3, _turtle()),
-  _lv(3, _cat()),
-  _lv(3, _bunny()),
-  _lv(3, _dog()),
-  _lv(3, _lion()),
-  _lv(3, _penguin()),
-  _lv(3, _giraffe()),
-  _lv(3, _snowman()),
+  _sun(),
+  _apple(),
+  _moon(),
+  _house(),
+  _tree(),
+  _mushroom(),
+  _robot(),
+  _sailboat(),
+  _fish(),
+  _flower(),
+  _iceCream(),
+  _car(),
+  _train(),
+  _rocket(),
+  _octopus(),
+  _butterfly(),
+  _bird(),
+  _turtle(),
+  _cat(),
+  _bunny(),
+  _dog(),
+  _lion(),
+  _penguin(),
+  _giraffe(),
+  _snowman(),
 ];
 
 /// A themed chain of lessons. The first lesson is open; finishing one opens

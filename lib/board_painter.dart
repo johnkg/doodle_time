@@ -4,6 +4,16 @@ import 'drawing_controller.dart';
 import 'emoji_font.dart';
 import 'models.dart';
 import 'pages.dart';
+import 'shapes.dart';
+
+const double _outlineWidth = 3;
+const double _detailWidth = 1.6;
+const Color _outlineColor = Color(0xFF212121);
+const Color _detailColor = Color(0xFF424242);
+
+/// Rainbow pen: the hue moves this many degrees per point.
+const int _rainbowDegreesPerPoint = 9;
+const double _rainbowSaturation = 0.85;
 
 /// Paints, bottom to top: white paper, color fills, strokes + stamps
 /// (in their own layer so the eraser only removes strokes), page outlines.
@@ -20,7 +30,7 @@ class BoardPainter extends CustomPainter {
     final page = c.page;
     List<Path> paths = const [];
     if (page != null) {
-      final m = pageMatrix(size);
+      final m = designMatrix(size);
       paths = [for (final r in page.regions) r.path.transform(m.storage)];
       final fills = <int, Color>{};
       for (final op in c.ops) {
@@ -49,19 +59,9 @@ class BoardPainter extends CustomPainter {
     canvas.restore();
 
     if (page != null) {
-      final outline = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..strokeJoin = StrokeJoin.round
-        ..strokeCap = StrokeCap.round
-        ..color = const Color(0xFF212121);
-      final detail = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6
-        ..strokeJoin = StrokeJoin.round
-        ..strokeCap = StrokeCap.round
-        ..color = const Color(0xFF424242);
-      final m = pageMatrix(size);
+      final outline = _linePaint(_outlineWidth, _outlineColor);
+      final detail = _linePaint(_detailWidth, _detailColor);
+      final m = designMatrix(size);
       final covers = _coversFor(page, size, paths);
       for (int i = 0; i < paths.length; i++) {
         canvas.save();
@@ -94,15 +94,14 @@ class BoardPainter extends CustomPainter {
   static Size? _coverSize;
   static List<Path?> _covers = const [];
 
-  static List<Path?> _coversFor(ColoringPage page, Size size, List<Path> paths) {
+  static List<Path?> _coversFor(
+      ColoringPage page, Size size, List<Path> paths) {
     if (page == _coverPage && size == _coverSize) return _covers;
     final covers = List<Path?>.filled(paths.length, null);
     Path? above;
     for (int i = paths.length - 1; i >= 0; i--) {
       covers[i] = above;
-      above = above == null
-          ? paths[i]
-          : Path.combine(PathOperation.union, above, paths[i]);
+      above = above == null ? paths[i] : above.union(paths[i]);
     }
     _coverPage = page;
     _coverSize = size;
@@ -154,8 +153,19 @@ class BoardPainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
-  Color _rainbowColor(int i) =>
-      HSVColor.fromAHSV(1, (i * 9 % 360).toDouble(), 0.85, 1).toColor();
+  Paint _linePaint(double width, Color color) => Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = width
+    ..strokeJoin = StrokeJoin.round
+    ..strokeCap = StrokeCap.round
+    ..color = color;
+
+  Color _rainbowColor(int pointIndex) => HSVColor.fromAHSV(
+          1,
+          (pointIndex * _rainbowDegreesPerPoint % 360).toDouble(),
+          _rainbowSaturation,
+          1)
+      .toColor();
 
   void _drawStamp(Canvas canvas, Size size, StampOp s) {
     final tp = TextPainter(

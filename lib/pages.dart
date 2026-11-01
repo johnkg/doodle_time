@@ -23,26 +23,11 @@ class ColoringPage {
   final List<Region> regions;
 }
 
-/// Maps the 100 x 100 design space into a centered square inside [size].
-Matrix4 pageMatrix(Size size) {
-  final s = math.min(size.width, size.height) / 100;
-  final dx = (size.width - 100 * s) / 2;
-  final dy = (size.height - 100 * s) / 2;
-  return Matrix4.translationValues(dx, dy, 0) * Matrix4.diagonal3Values(s, s, 1);
-}
-
 // ---- builders -----------------------------------------------------------------
-
-Path _union(Iterable<Path> paths) =>
-    paths.reduce((a, b) => Path.combine(PathOperation.union, a, b));
-
-Path _minus(Path a, Path b) => Path.combine(PathOperation.difference, a, b);
-
-Path _within(Path a, Path b) => Path.combine(PathOperation.intersect, a, b);
 
 /// Clouds, bushes, smoke: overlapping circles merged into one outline.
 Path _puffs(List<(double, double, double)> circles) =>
-    _union([for (final (x, y, r) in circles) circlePath(x, y, r)]);
+    [for (final (x, y, r) in circles) circlePath(x, y, r)].union();
 
 /// Ground, hills or sea: a smooth top edge filled down to the page bottom.
 Path _below(List<Offset> top) => smoothPath(top)
@@ -54,18 +39,6 @@ Path _seg(double x1, double y1, double x2, double y2) =>
     polyPath([Offset(x1, y1), Offset(x2, y2)], close: false);
 
 Path _wave(List<Offset> pts) => smoothPath(pts);
-
-/// Leaf from [base] to [tip], [w] wide, bulging evenly on both sides.
-Path _leaf(Offset base, Offset tip, double w) {
-  final mid = (base + tip) / 2;
-  final d = tip - base;
-  final n = Offset(-d.dy, d.dx) / d.distance * w;
-  return Path()
-    ..moveTo(base.dx, base.dy)
-    ..quadraticBezierTo(mid.dx + n.dx, mid.dy + n.dy, tip.dx, tip.dy)
-    ..quadraticBezierTo(mid.dx - n.dx, mid.dy - n.dy, base.dx, base.dy)
-    ..close();
-}
 
 /// Middle vein plus side veins for a leaf made by [_leaf].
 List<Path> _veins(Offset base, Offset tip, double w) {
@@ -118,10 +91,10 @@ List<Path> _rays(double cx, double cy, double r1, double r2, int n) => [
     ];
 
 /// Round-petal flower head: [n] petals of a circle with radius [r].
-Path _blossom(double cx, double cy, double r, int n) => _union([
+Path _blossom(double cx, double cy, double r, int n) => [
       for (final o in ringPoints(cx, cy, r * 0.58, n)) circlePath(o.dx, o.dy, r * 0.42),
       circlePath(cx, cy, r * 0.6),
-    ]);
+    ].union();
 
 /// Little grass tufts along a line.
 List<Path> _tufts(List<Offset> spots) => [
@@ -143,16 +116,9 @@ List<Path> _hatch(double l, double t, double r, double b, double gap) => [
       ],
     ];
 
-Path _rotate(Path p, double angle, Offset c) {
-  final m = Matrix4.translationValues(c.dx, c.dy, 0) *
-      Matrix4.rotationZ(angle) *
-      Matrix4.translationValues(-c.dx, -c.dy, 0);
-  return p.transform(m.storage);
-}
-
 Region _turned(Region r, double angle, Offset c) => Region(
-      _rotate(r.path, angle, c),
-      details: [for (final d in r.details) _rotate(d, angle, c)],
+      rotatePath(r.path, angle, c),
+      details: [for (final d in r.details) rotatePath(d, angle, c)],
     );
 
 // ---- pages ----------------------------------------------------------------------
@@ -350,9 +316,9 @@ ColoringPage _flowerPage() {
       Offset(39, 36), Offset(42, 36), Offset(43, 60), Offset(45, 90),
       Offset(41, 90), Offset(39.5, 60),
     ])), // stem
-    Region(_leaf(const Offset(41, 66), const Offset(24, 56), 6),
+    Region(leafPath(const Offset(41, 66), const Offset(24, 56), 6),
         details: _veins(const Offset(41, 66), const Offset(24, 56), 6)),
-    Region(_leaf(const Offset(43, 76), const Offset(60, 64), 6),
+    Region(leafPath(const Offset(43, 76), const Offset(60, 64), 6),
         details: _veins(const Offset(43, 76), const Offset(60, 64), 6)),
     for (int i = 0; i < 14; i++)
       Region(
@@ -370,7 +336,7 @@ ColoringPage _flowerPage() {
     Region(polyPath(const [
       Offset(71, 50), Offset(73, 50), Offset(74, 88), Offset(70, 88),
     ])), // tulip stem
-    Region(_leaf(const Offset(72, 88), const Offset(80, 62), 4),
+    Region(leafPath(const Offset(72, 88), const Offset(80, 62), 4),
         details: [_seg(72, 88, 80, 62)]),
     Region(blobPath(const [
       Offset(68, 52), Offset(67, 42), Offset(72, 35), Offset(77, 42),
@@ -435,8 +401,8 @@ ColoringPage _rocketPage() {
       for (final y in [31.0, 51.0, 66.0])
         for (final x in [44.0, 50.0, 56.0]) circlePath(x, y, 0.5),
     ]),
-    Region(_within(body, rectPath(0, 0, 100, 27))), // nose
-    Region(_within(body, rectPath(0, 55, 100, 61))), // stripe
+    Region(body.within(rectPath(0, 0, 100, 27))), // nose
+    Region(body.within(rectPath(0, 55, 100, 61))), // stripe
     Region(ellipsePath(50, 68, 2.4, 9)), // front fin
     Region(circlePath(50, 37, 7.5)), // window frame
     Region(circlePath(50, 37, 5.2), details: [arcPath(50, 37, 3.4, 3.6, 1.3)]),
@@ -448,16 +414,12 @@ ColoringPage _rocketPage() {
         (94.0, 72.0), (34.0, 52.0), (26.0, 84.0),
       ]) ...[_seg(x - 1.5, y, x + 1.5, y), _seg(x, y - 1.5, x, y + 1.5)],
     ]), // space
-    Region(_minus(ellipsePath(80, 24, 18, 5, angle: -0.35),
-        ellipsePath(80, 24, 13, 2.6, angle: -0.35))), // ring (back)
+    Region(ellipsePath(80, 24, 18, 5, angle: -0.35).minus(ellipsePath(80, 24, 13, 2.6, angle: -0.35))), // ring (back)
     Region(circlePath(80, 24, 10), details: [
       _wave(const [Offset(71, 20), Offset(78, 18), Offset(86, 20), Offset(90, 19)]),
       _wave(const [Offset(70, 27), Offset(78, 25), Offset(88, 28)]),
     ]), // planet
-    Region(_within(
-        _minus(ellipsePath(80, 24, 18, 5, angle: -0.35),
-            ellipsePath(80, 24, 13, 2.6, angle: -0.35)),
-        _rotate(rectPath(50, 24, 110, 50), -0.35, const Offset(80, 24)))),
+    Region(ellipsePath(80, 24, 18, 5, angle: -0.35).minus(ellipsePath(80, 24, 13, 2.6, angle: -0.35)).within(rotatePath(rectPath(50, 24, 110, 50), -0.35, const Offset(80, 24)))),
     Region(circlePath(14, 68, 8)), // moon
     Region(circlePath(11, 65, 2.4)),
     Region(circlePath(17, 71, 2.8)),
@@ -511,7 +473,7 @@ ColoringPage _carPage() {
       arcPath(26, 73, 11, math.pi, math.pi),
       arcPath(74, 73, 11, math.pi, math.pi),
     ]),
-    Region(_within(body, rectPath(0, 60, 100, 62.5))), // stripe
+    Region(body.within(rectPath(0, 60, 100, 62.5))), // stripe
     Region(polyPath(const [
       Offset(30, 51), Offset(37, 42), Offset(46, 40), Offset(46, 51),
     ])), // back window
@@ -576,11 +538,11 @@ ColoringPage _butterflyPage() {
       ..._tufts(const [Offset(30, 92), Offset(44, 96), Offset(60, 93), Offset(70, 98)]),
     ]), // grass
     Region(polyPath(const [Offset(13, 78), Offset(15, 78), Offset(15, 100), Offset(13, 100)])),
-    Region(_leaf(const Offset(14, 92), const Offset(4, 84), 3.5)),
+    Region(leafPath(const Offset(14, 92), const Offset(4, 84), 3.5)),
     Region(_blossom(14, 76, 7, 6)),
     Region(circlePath(14, 76, 2.8)),
     Region(polyPath(const [Offset(85, 76), Offset(87, 76), Offset(87, 100), Offset(85, 100)])),
-    Region(_leaf(const Offset(86, 90), const Offset(96, 82), 3.5)),
+    Region(leafPath(const Offset(86, 90), const Offset(96, 82), 3.5)),
     Region(_blossom(86, 74, 7, 6)),
     Region(circlePath(86, 74, 2.8)),
     ...wings,
@@ -610,14 +572,14 @@ Path _band(double cx, double cy, double ro, double ri) {
 }
 
 /// Pine tree: three stacked triangles; [x] is the middle, [base] the bottom.
-Path _pine(double x, double base, double h) => _union([
+Path _pine(double x, double base, double h) => [
       for (int i = 0; i < 3; i++)
         polyPath([
           Offset(x - h * (0.42 - i * 0.08), base - h * (0.12 + i * 0.26)),
           Offset(x, base - h * (0.5 + i * 0.25)),
           Offset(x + h * (0.42 - i * 0.08), base - h * (0.12 + i * 0.26)),
         ]),
-    ]);
+    ].union();
 
 /// A gull far away: two little arcs.
 List<Path> _bird(double x, double y) => [
@@ -753,7 +715,7 @@ ColoringPage _catPage() {
       Offset(54, 33), Offset(59, 29.5), Offset(64, 33), Offset(59, 36.5),
     ])),
     Region(ellipsePath(59, 33, 1.5, 3), details: [circlePath(59.6, 31.6, 0.5)]),
-    Region(_union([ellipsePath(45.5, 44, 5.5, 4), ellipsePath(54.5, 44, 5.5, 4)]),
+    Region([ellipsePath(45.5, 44, 5.5, 4), ellipsePath(54.5, 44, 5.5, 4)].union(),
         details: [
           for (final (x, y) in const [(43.0, 43.0), (45.0, 45.0), (42.0, 46.0), (57.0, 43.0), (55.0, 45.0), (58.0, 46.0)])
             circlePath(x, y, 0.4),
@@ -796,8 +758,8 @@ ColoringPage _boatPage() {
       Offset(26, 58), Offset(30, 66),
     ])), // island
     Region(lighthouse),
-    Region(_within(lighthouse, rectPath(0, 40, 100, 44))),
-    Region(_within(lighthouse, rectPath(0, 48, 100, 52))),
+    Region(lighthouse.within(rectPath(0, 40, 100, 44))),
+    Region(lighthouse.within(rectPath(0, 48, 100, 52))),
     Region(rectPath(10, 31, 16, 36), details: [_seg(13, 31, 13, 36)]), // lamp
     Region(polyPath(const [Offset(9, 31), Offset(13, 26), Offset(17, 31)])),
     Region(_below(const [
@@ -831,11 +793,11 @@ ColoringPage _boatPage() {
     Region(hull, details: [
       _seg(16, 68, 90, 68),
     ]),
-    Region(_within(hull, rectPath(0, 73, 100, 76.5))), // stripe
+    Region(hull.within(rectPath(0, 73, 100, 76.5))), // stripe
     for (final x in const [36.0, 48.0, 60.0])
       Region(circlePath(x, 69.5, 2.3)), // portholes
     Region(roundRectPath(85, 70, 91, 78, 2.5)), // buoy
-    Region(_within(roundRectPath(85, 70, 91, 78, 2.5), rectPath(0, 73, 100, 75))),
+    Region(roundRectPath(85, 70, 91, 78, 2.5).within(rectPath(0, 73, 100, 75))),
   ]);
 }
 
@@ -930,8 +892,8 @@ ColoringPage _iceCreamPage() {
     ]), // table
     Region(ellipsePath(50, 89, 32, 7.5), details: [ellipsePath(50, 89, 26, 5)]),
     Region(ellipsePath(66, 88, 5, 1.8)), // puddle
-    Region(_rotate(roundRectPath(29, 10, 34, 32, 1), -0.45, const Offset(31, 30)),
-        details: [_rotate(_union(_hatch(29, 10, 34, 32, 3)), -0.45, const Offset(31, 30))]), // wafer
+    Region(rotatePath(roundRectPath(29, 10, 34, 32, 1), -0.45, const Offset(31, 30)),
+        details: [rotatePath(_hatch(29, 10, 34, 32, 3).union(), -0.45, const Offset(31, 30))]), // wafer
     Region(polyPath(const [Offset(34, 53), Offset(66, 53), Offset(50, 92)]),
         details: _hatch(30, 53, 70, 92, 5)), // cone
     Region(roundRectPath(32, 49, 68, 56, 2.5)), // cone rim
@@ -979,12 +941,12 @@ ColoringPage _turtlePage() {
       Offset(9, 50), Offset(12, 58), Offset(10, 68), Offset(13, 78),
       Offset(12, 90),
     ]), details: [_wave(const [Offset(9, 88), Offset(8, 72), Offset(8.5, 56)])]),
-    Region(_union([
+    Region([
       roundRectPath(84, 70, 89, 92, 2.5),
       roundRectPath(78, 76, 82, 88, 2),
       roundRectPath(91, 74, 95, 90, 2),
       roundRectPath(79, 84, 94, 90, 2),
-    ]), details: [circlePath(86.5, 74, 0.8), circlePath(80, 80, 0.7), circlePath(93, 78, 0.7)]), // coral
+    ].union(), details: [circlePath(86.5, 74, 0.8), circlePath(80, 80, 0.7), circlePath(93, 78, 0.7)]), // coral
     Region(_below(const [
       Offset(0, 88), Offset(30, 85), Offset(60, 89), Offset(100, 86),
     ]), details: [
@@ -998,12 +960,12 @@ ColoringPage _turtlePage() {
     Region(ellipsePath(20, 16, 6, 3.2), details: [circlePath(23.5, 15.2, 0.7)]),
     Region(polyPath(const [Offset(27, 26), Offset(22, 22.5), Offset(22, 29.5)])),
     Region(ellipsePath(32, 26, 6, 3.2), details: [circlePath(35.5, 25.2, 0.7)]),
-    Region(_leaf(const Offset(62, 40), const Offset(52, 15), 6),
+    Region(leafPath(const Offset(62, 40), const Offset(52, 15), 6),
         details: _veins(const Offset(62, 40), const Offset(52, 15), 6)),
-    Region(_leaf(const Offset(62, 62), const Offset(52, 85), 6),
+    Region(leafPath(const Offset(62, 62), const Offset(52, 85), 6),
         details: _veins(const Offset(62, 62), const Offset(52, 85), 6)),
-    Region(_leaf(const Offset(34, 40), const Offset(20, 30), 4)),
-    Region(_leaf(const Offset(34, 62), const Offset(20, 72), 4)),
+    Region(leafPath(const Offset(34, 40), const Offset(20, 30), 4)),
+    Region(leafPath(const Offset(34, 62), const Offset(20, 72), 4)),
     Region(polyPath(const [Offset(28, 47.5), Offset(18, 51), Offset(28, 54.5)])), // tail
     Region(ellipsePath(75, 51, 8, 6), details: [
       circlePath(78, 47.5, 1), circlePath(78, 54.5, 1),
